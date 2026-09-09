@@ -6,6 +6,21 @@ export type SubjectSource =
 
 export type ActorType = "user" | "agent" | "bot" | "system";
 
+export type AttachmentKind = "image" | "file" | "video" | "audio" | "unknown";
+
+export interface EmbeddedAttachment {
+  kind: AttachmentKind;
+  url: string | null;
+  thumbnail_url: string | null;
+  file_name: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  raw: Record<string, unknown>;
+}
+
 export type ExtractEvent =
   | "Chat-Transcript"
   | "CSAT-Score"
@@ -40,6 +55,7 @@ export interface EmbeddedMessage {
   message_source: string | null;
   text: string;
   has_attachment: boolean;
+  attachments: EmbeddedAttachment[];
   /** Original CSV columns for this message — Freshchat as-is */
   raw: Record<string, string>;
 }

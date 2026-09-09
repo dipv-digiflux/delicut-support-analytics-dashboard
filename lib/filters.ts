@@ -2,7 +2,11 @@ export interface ConversationFilters {
   from?: string;
   to?: string;
   subject?: string;
+  /** @deprecated prefer agentIds — single agent or "unassigned" */
   agent?: string;
+  agentIds: string[];
+  userIds: string[];
+  channelIds: string[];
   channel?: string;
   group?: string;
   resolved?: "true" | "false";
@@ -20,10 +24,28 @@ const SORT_ALLOW = new Set([
   "created_at",
   "updated_at",
   "resolved_at",
+  "last_message_at",
   "csat",
   "subject",
   "agent",
 ]);
+
+function getAll(
+  sp: URLSearchParams | Record<string, string | string[] | undefined>,
+  key: string,
+): string[] {
+  if (sp instanceof URLSearchParams) {
+    const multi = sp.getAll(key).flatMap((v) => v.split(",")).map((s) => s.trim()).filter(Boolean);
+    if (multi.length) return [...new Set(multi)];
+    const single = sp.get(key);
+    if (!single) return [];
+    return [...new Set(single.split(",").map((s) => s.trim()).filter(Boolean))];
+  }
+  const v = sp[key];
+  if (v == null) return [];
+  const arr = Array.isArray(v) ? v : [v];
+  return [...new Set(arr.flatMap((x) => String(x).split(",")).map((s) => s.trim()).filter(Boolean))];
+}
 
 export function parseFilters(
   sp: URLSearchParams | Record<string, string | string[] | undefined>,
@@ -41,11 +63,24 @@ export function parseFilters(
   const limitRaw = Number(get("limit") || 25) || 25;
   const limit = [10, 25, 40, 50, 100].includes(limitRaw) ? limitRaw : 25;
 
+  const agentIds = getAll(sp, "agent");
+  const legacyAgent = get("agent");
+  // If single legacy value and not comma-list style already in agentIds
+  const agent =
+    agentIds.length === 1 && !getAll(sp, "agentIds").length
+      ? agentIds[0]
+      : legacyAgent && !legacyAgent.includes(",")
+        ? legacyAgent
+        : undefined;
+
   return {
     from: get("from"),
     to: get("to"),
     subject: get("subject"),
-    agent: get("agent"),
+    agent: agentIds.length <= 1 ? agentIds[0] || agent : undefined,
+    agentIds: agentIds.filter((id) => id !== "unassigned" || agentIds.length === 1),
+    userIds: getAll(sp, "user"),
+    channelIds: getAll(sp, "channelId"),
     channel: get("channel"),
     group: get("group"),
     resolved: get("resolved") as "true" | "false" | undefined,
@@ -104,19 +139,48 @@ export function buildConversationMatch(
     });
   }
 
-  if (filters.agent === "unassigned") {
+  const agentIds = filters.agentIds?.length
+    ? filters.agentIds
+    : filters.agent
+      ? [filters.agent]
+      : [];
+
+  if (agentIds.length === 1 && agentIds[0] === "unassigned") {
     and.push({
       $or: [
         { assigned_agent_id: null },
         { assigned_agent_id: { $exists: false } },
         { assigned_agent_id: "" },
+        { agent_ids: { $size: 0 } },
       ],
     });
-  } else if (filters.agent) {
-    and.push({ assigned_agent_id: filters.agent });
+  } else if (agentIds.length) {
+    const ids = agentIds.filter((id) => id !== "unassigned");
+    if (ids.length) {
+      and.push({
+        $or: [
+          { agent_ids: { $in: ids } },
+          { assigned_agent_id: { $in: ids } },
+        ],
+      });
+    }
   }
 
-  if (filters.channel) and.push({ channel_name: filters.channel });
+  if (filters.userIds?.length) {
+    and.push({
+      $or: [
+        { primary_user_id: { $in: filters.userIds } },
+        { user_ids: { $in: filters.userIds } },
+      ],
+    });
+  }
+
+  if (filters.channelIds?.length) {
+    and.push({ channel_id: { $in: filters.channelIds } });
+  } else if (filters.channel) {
+    and.push({ channel_name: filters.channel });
+  }
+
   if (filters.group) and.push({ group_name: filters.group });
 
   if (filters.resolved === "true") and.push({ resolved: true });
@@ -170,6 +234,8 @@ export function sortSpec(filters: ConversationFilters): Record<string, 1 | -1> {
       return { resolved_at: dir };
     case "updated_at":
       return { updated_at: dir };
+    case "last_message_at":
+      return { last_message_at: dir };
     default:
       return { created_at: dir };
   }
@@ -183,4 +249,28 @@ export function defaultDateRange(days = 30): { from: string; to: string } {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
   };
+}
+
+/** Serialize filters back to query string (for export / links). */
+export function filtersToQuery(filters: ConversationFilters): string {
+  const qs = new URLSearchParams();
+  const set = (k: string, v?: string | number | null) => {
+    if (v != null && v !== "") qs.set(k, String(v));
+  };
+  set("from", filters.from);
+  set("to", filters.to);
+  set("subject", filters.subject);
+  set("channel", filters.channel);
+  set("group", filters.group);
+  set("resolved", filters.resolved);
+  set("csat", filters.csat);
+  set("q", filters.q);
+  set("sort", filters.sort);
+  set("order", filters.order);
+  set("page", filters.page);
+  set("limit", filters.limit);
+  for (const id of filters.agentIds || []) qs.append("agent", id);
+  for (const id of filters.userIds || []) qs.append("user", id);
+  for (const id of filters.channelIds || []) qs.append("channelId", id);
+  return qs.toString();
 }

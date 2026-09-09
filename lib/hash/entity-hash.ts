@@ -36,6 +36,13 @@ export function transcriptHash(input: {
       m.message_type,
       m.text,
       m.has_attachment,
+      (m.attachments || []).map((a) => [
+        a.kind,
+        a.url,
+        a.file_name,
+        a.mime_type,
+        a.size_bytes,
+      ]),
     ]),
   });
 }

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getConfig } from "@/lib/config";
 
 /**
- * Optional API gate. Set DASHBOARD_API_SECRET in .env.local.
+ * Optional API gate. Set DASHBOARD_API_SECRET in .env / .env.local.
  * Clients must send: Authorization: Bearer <secret>
  * If secret is empty, routes stay open (local-dev default).
  */
 export function assertApiAccess(req: NextRequest): NextResponse | null {
-  const secret = process.env.DASHBOARD_API_SECRET || "";
+  const secret = getConfig().DASHBOARD_API_SECRET || "";
   if (!secret) return null;
 
   const header = req.headers.get("authorization") || "";
@@ -27,3 +28,6 @@ export function assertApiAccess(req: NextRequest): NextResponse | null {
   }
   return null;
 }
+
+/** Alias used by newer routes */
+export const requireApiAuth = assertApiAccess;

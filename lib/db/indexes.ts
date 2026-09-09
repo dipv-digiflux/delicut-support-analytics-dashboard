@@ -10,6 +10,9 @@ export async function ensureIndexes(db: Db): Promise<void> {
     { key: { "csat.rating": 1, created_at: -1 }, sparse: true },
     { key: { "resolution.label": 1, created_at: -1 }, sparse: true },
     { key: { assigned_agent_id: 1, created_at: -1 }, sparse: true },
+    { key: { agent_ids: 1, created_at: -1 } },
+    { key: { user_ids: 1, created_at: -1 } },
+    { key: { channel_id: 1, created_at: -1 }, sparse: true },
     { key: { primary_user_id: 1, created_at: -1 }, sparse: true },
     {
       key: { is_stub: 1 },
@@ -22,6 +25,7 @@ export async function ensureIndexes(db: Db): Promise<void> {
   const users = db.collection("users");
   await users.createIndexes([
     { key: { role: 1, "enrichment.status": 1 } },
+    { key: { role: 1, first_name: 1, last_name: 1 } },
     { key: { email: 1 }, sparse: true },
     { key: { "stats.last_seen_at": -1 } },
   ]);

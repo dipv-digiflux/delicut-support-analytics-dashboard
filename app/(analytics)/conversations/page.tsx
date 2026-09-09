@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { FilterBar } from "@/components/FilterBar";
 import { ExportButton } from "@/components/ExportButton";
-import { parseFilters, defaultDateRange } from "@/lib/filters";
 import { listConversations } from "@/lib/aggregations";
+import { filtersFromSearchParams } from "@/lib/filter-defaults";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,7 @@ export default async function ConversationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const defaults = defaultDateRange(30);
-  const filters = parseFilters({
-    ...sp,
-    from: sp.from || defaults.from,
-    to: sp.to || defaults.to,
-  });
+  const filters = filtersFromSearchParams(sp);
 
   let result: Awaited<ReturnType<typeof listConversations>> | null = null;
   let error: string | null = null;

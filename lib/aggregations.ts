@@ -1,4 +1,5 @@
 import { collections } from "@/lib/db/client";
+import { getConfig } from "@/lib/config";
 import {
   buildConversationMatch,
   sortSpec,
@@ -437,12 +438,18 @@ export async function listConversations(filters: ConversationFilters) {
           id: c.assigned_agent_id,
           name: c.assigned_agent_name || "Unassigned",
         },
+        responders: (c.agent_ids || []).map((id) => ({ id })),
         status: c.status,
         resolved: c.resolved,
         reopened: c.reopened,
         csat: c.csat?.rating ?? null,
         csatComment: c.csat?.comment || null,
         messageCount: c.message_count,
+        attachmentCount: (c.messages || []).reduce(
+          (n, m) => n + (m.attachments?.length || (m.has_attachment ? 1 : 0)),
+          0,
+        ),
+        lastMessageAt: c.last_message_at,
         firstResponseSeconds: c.metrics?.first_response_time_seconds ?? null,
         resolutionSeconds: c.metrics?.resolution_time_seconds ?? null,
         preview: c.messages.find((m) => m.actor_type === "user")?.text || "",
@@ -531,6 +538,7 @@ export async function getConversation(id: string) {
       messageSource: m.message_source,
       createdAt: m.created_at,
       hasAttachment: m.has_attachment,
+      attachments: m.attachments || [],
     })),
   };
 }
@@ -538,7 +546,7 @@ export async function getConversation(id: string) {
 export async function exportConversationsCsv(filters: ConversationFilters) {
   const { conversations, users } = await collections();
   const match = buildConversationMatch({ ...filters, page: 1, limit: 25 });
-  const EXPORT_CAP = 10000;
+  const EXPORT_CAP = getConfig().EXPORT_CSV_MAX_ROWS;
   const totalMatched = await conversations.countDocuments(match);
   const items = await conversations
     .find(match)
@@ -556,11 +564,14 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
   const headers = [
     "conversation_id",
     "created_at",
+    "last_message_at",
     "resolved_at",
     "resolved",
     "reopened",
     "status",
+    "channel_id",
     "channel",
+    "group_id",
     "group",
     "user_id",
     "user_name",
@@ -568,6 +579,7 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
     "user_phone",
     "agent_id",
     "agent_name",
+    "responder_ids",
     "resolution_label",
     "resolution_sub_label",
     "csat_rating",
@@ -575,8 +587,10 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
     "csat_comment",
     "csat_submitted_at",
     "message_count",
+    "attachment_count",
     "first_response_seconds",
     "resolution_seconds",
+    "response_time_seconds",
     "conversation_url",
     "preview",
   ];
@@ -593,15 +607,22 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
     const name = u
       ? [u.first_name, u.last_name].filter(Boolean).join(" ")
       : "";
+    const attachmentCount = (c.messages || []).reduce(
+      (n, m) => n + (m.attachments?.length || (m.has_attachment ? 1 : 0)),
+      0,
+    );
     lines.push(
       [
         c._id,
         c.created_at?.toISOString?.() || "",
+        c.last_message_at?.toISOString?.() || "",
         c.resolved_at?.toISOString?.() || "",
         c.resolved,
         c.reopened,
         c.status,
+        c.channel_id,
         c.channel_name,
+        c.group_id,
         c.group_name,
         c.primary_user_id,
         name,
@@ -609,6 +630,7 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
         u?.phone,
         c.assigned_agent_id,
         c.assigned_agent_name,
+        (c.agent_ids || []).join("|"),
         c.resolution?.label,
         c.resolution?.sub_label,
         c.csat?.rating,
@@ -616,8 +638,10 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
         c.csat?.comment,
         c.csat?.submitted_at?.toISOString?.() || "",
         c.message_count,
+        attachmentCount,
         c.metrics?.first_response_time_seconds,
         c.metrics?.resolution_time_seconds,
+        c.metrics?.response_time_seconds,
         c.conversation_url,
         c.messages.find((m) => m.actor_type === "user")?.text || "",
       ]

@@ -12,6 +12,21 @@ function parseSeconds(raw: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Drop top-level keys from defaults that also appear in $set (Mongo path conflict). */
+function omitKeys<T extends Record<string, unknown>>(
+  obj: T,
+  keys: string[],
+): Partial<T> {
+  const out = { ...obj };
+  for (const k of keys) {
+    // dotted path like metrics.x → omit parent metrics if any set key starts with it
+    const top = k.split(".")[0];
+    delete out[top as keyof T];
+    delete out[k as keyof T];
+  }
+  return out;
+}
+
 /**
  * Merge lifecycle / SLA Extract rows onto conversations.
  * Values come straight from Freshchat CSV columns — we do not invent metrics.
@@ -151,40 +166,43 @@ export async function mergeMetricRows(
               updated_at: now,
             },
           },
-          $setOnInsert: {
-            app_id: null,
-            channel_id: null,
-            channel_name: null,
-            status: null,
-            assigned_agent_id: null,
-            assigned_agent_name: null,
-            assigned_group_id: null,
-            created_at: null,
-            last_message_at: null,
-            resolved_at: null,
-            resolved: false,
-            user_ids: [],
-            agent_ids: [],
-            primary_user_id: null,
-            messages: [],
-            message_count: 0,
-            messages_truncated: false,
-            csat: null,
-            resolution: null,
-            derived: null,
-            metrics: {
-              first_response_time_seconds: null,
-              resolution_time_seconds: null,
-              response_time_seconds: null,
+          $setOnInsert: omitKeys(
+            {
+              app_id: null,
+              channel_id: null,
+              channel_name: null,
+              status: null,
+              assigned_agent_id: null,
+              assigned_agent_name: null,
+              assigned_group_id: null,
+              created_at: null,
+              last_message_at: null,
+              resolved_at: null,
+              resolved: false,
+              user_ids: [],
+              agent_ids: [],
+              primary_user_id: null,
+              messages: [],
+              message_count: 0,
+              messages_truncated: false,
+              csat: null,
+              resolution: null,
+              derived: null,
+              metrics: {
+                first_response_time_seconds: null,
+                resolution_time_seconds: null,
+                response_time_seconds: null,
+              },
+              group_id: null,
+              group_name: null,
+              reopened: null,
+              conversation_url: null,
+              is_stub: true,
+              stub_reason: "label_orphan",
+              first_seen_at: now,
             },
-            group_id: null,
-            group_name: null,
-            reopened: null,
-            conversation_url: null,
-            is_stub: true,
-            stub_reason: "label_orphan",
-            first_seen_at: now,
-          },
+            Object.keys(patch.set),
+          ),
         },
         upsert: true,
       },

@@ -5,7 +5,7 @@ import {
 } from "@/lib/hash/entity-hash";
 import { getField } from "@/lib/parse/csv";
 import { parseUtcDate } from "@/lib/normalize/dates";
-import { textFromMessageParts, normalizeText } from "@/lib/normalize/text";
+import { parseMessageParts, normalizeText } from "@/lib/normalize/text";
 import { mapActorType } from "@/lib/normalize/ids";
 import type {
   Conversation,
@@ -65,9 +65,8 @@ export async function mergeTranscriptRows(
       parseUtcDate(getField(row, "created_time", "created_at")) || now;
     const actorType = mapActorType(getField(row, "actor_type"));
     const actorId = getField(row, "actor_id");
-    const { text, hasAttachment } = textFromMessageParts(
-      getField(row, "message_parts"),
-    );
+    const parsed = parseMessageParts(getField(row, "message_parts"));
+    const { text, hasAttachment, attachments } = parsed;
 
     const msg: EmbeddedMessage = {
       message_id: messageId,
@@ -82,6 +81,7 @@ export async function mergeTranscriptRows(
       message_source: getField(row, "message_source"),
       text: text || normalizeText(getField(row, "message")),
       has_attachment: hasAttachment,
+      attachments,
       raw: { ...row },
     };
 

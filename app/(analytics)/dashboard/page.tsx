@@ -10,9 +10,9 @@ import {
   ChannelBarChart,
   AgentVolumeChart,
 } from "@/components/charts/Charts";
-import { parseFilters, defaultDateRange } from "@/lib/filters";
 import { getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
+import { filtersFromSearchParams } from "@/lib/filter-defaults";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +29,7 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const defaults = defaultDateRange(30);
-  const merged = {
-    ...sp,
-    from: sp.from || defaults.from,
-    to: sp.to || defaults.to,
-  };
-  const filters = parseFilters(merged);
+  const filters = filtersFromSearchParams(sp);
 
   let data: Awaited<ReturnType<typeof getKpis>> | null = null;
   let sync: Awaited<ReturnType<typeof getSyncStatus>> | null = null;
