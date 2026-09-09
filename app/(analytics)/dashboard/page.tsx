@@ -72,7 +72,7 @@ export default async function DashboardPage({
           <div className="mb-6 h-20 animate-pulse rounded bg-slate-100" />
         }
       >
-        <FilterBar />
+        <FilterBar defaultCollapsed />
       </Suspense>
 
       {sync?.state === "never_run" && (
