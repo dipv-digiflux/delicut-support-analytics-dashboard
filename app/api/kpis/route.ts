@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       meta: {
         from: filters.from,
         to: filters.to,
-        timezone: cfg.REPORTING_TIMEZONE,
+        timezone: filters.timeZone,
         lastSyncedAt: sync.lastCompletedAt,
         syncState: sync.state,
         warnings: [],

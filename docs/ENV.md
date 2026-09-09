@@ -1,64 +1,51 @@
-# Environment variables — what each one is for
+# Environment variables
 
-Copy [`.env.example`](../.env.example) → `.env.local` and fill Freshchat secrets.  
-**Never commit real tokens.** Load order: `.env` then `.env.local` (overrides).
+## What belongs in `.env` / `.env.local`
 
-All tunables below are read via `lib/config.ts` (`getConfig()`).  
-**API + DB credentials stay in env** (not hardcoded).
+**Keep here (secrets + DB):**
 
----
+| Variable | Purpose |
+|----------|---------|
+| `FRESHCHAT_API_BASE` | Freshchat API root `https://…/v2` |
+| `FRESHCHAT_API_TOKEN` | Bearer token |
+| `MONGODB_URI` | Mongo connection |
+| `MONGODB_DB` | Database name |
 
-## Freshchat API (required for sync)
+**Optional overrides** (defaults live in `lib/config.ts` — only set when you need to change them):
 
-| Variable | Used for |
-|----------|----------|
-| `FRESHCHAT_API_BASE` | Account API root `https://…freshchat.com/v2` (HTTP coerced to HTTPS) |
-| `FRESHCHAT_API_TOKEN` | Bearer token for Extract + Agents/Users APIs |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `REPORTING_TIMEZONE` | `Asia/Dubai` | Default timezone when URL has no `?tz=` |
+| `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Support Analytics | Chrome branding |
+| `DASHBOARD_API_SECRET` | _(empty)_ | Optional Bearer gate on `/api/*` |
+| `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats |
+| `SYNC_EVENTS` | (all core Extract events) | Which reports to sync |
+| `LOG_LEVEL` / `LOG_TO_FILE` | `info` / `true` | Sync logging |
 
-## MongoDB
+All other tunables (extract budgets, HTTP retries, page sizes, export caps, etc.) are **documented in `lib/config.ts`** with defaults — not required in env.
 
-| Variable | Used for |
-|----------|----------|
-| `MONGODB_URI` / `MONGODB_DB` | Local warehouse connection |
-| `MONGODB_MAX_POOL_SIZE` / `MONGODB_TIMEOUT_MS` | Pool + connect timeout |
-
-## Sync / Extract / HTTP / enrichment / classify
-
-See commented blocks in `.env.example` — each maps 1:1 to `getConfig()` fields used by `lib/sync/*` and `lib/freshchat/*`.
-
-## Dashboard / UI product
-
-| Variable | Used for |
-|----------|----------|
-| `APP_BRAND_NAME` | Sidebar + header brand (default `Delicut`) |
-| `APP_PRODUCT_NAME` | Subtitle (default `Support Analytics`) |
-| `REPORTING_TIMEZONE` | Display label only (filters stay UTC days) |
-| `SYNC_STALE_AFTER_MINUTES` | “Stale sync” badge threshold |
-| `DASHBOARD_DEFAULT_RANGE_DAYS` | Default `from`/`to` when URL has no dates |
-| `UI_DEFAULT_PAGE_SIZE` | Default list page size (10/25/40/50/100) |
-| `DIRECTORY_SEARCH_LIMIT` | Agent/customer/channel directory API page size |
-| `CUSTOMER_CHAT_PAGE_SIZE` | Messages per scroll page on user chat history |
-| `EXPORT_CSV_MAX_ROWS` | CSV export row cap + truncation headers |
-| `DASHBOARD_API_SECRET` | Optional Bearer gate on `/api/*` (empty = open locally) |
-
-## Logging
-
-| Variable | Used for |
-|----------|----------|
-| `LOG_TO_FILE` / `LOG_DIR` / `LOG_RETENTION_DAYS` | File logs under `logs/` |
-| `LOG_LEVEL` / `LOG_FORMAT` | Console verbosity + tty/json |
-
-See [LOGGING.md](./LOGGING.md).
+Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 
 ---
 
-## Minimal secrets-only `.env.local`
+## Timezones (Dubai / IST / UTC)
+
+- **Default:** Dubai (`Asia/Dubai`) via `REPORTING_TIMEZONE`.
+- **UI:** Header dropdown switches **Dubai (GST)**, **India (IST)**, **UTC**.
+- Choice is stored in `localStorage` (`delicut.timezone`) and URL `?tz=…`.
+- **From/To date filters** are calendar days in the **selected** timezone (converted to UTC for Mongo).
+- Timestamps in tables/chat should format with the same zone (`lib/timezone.ts` helpers).
+
+---
+
+## Minimal `.env.local`
 
 ```bash
 FRESHCHAT_API_BASE=https://YOUR_DOMAIN.freshchat.com/v2
 FRESHCHAT_API_TOKEN=paste_token_here
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DB=freshchat_analytics
+REPORTING_TIMEZONE=Asia/Dubai
 ```
 
-Everything else can stay at `.env.example` defaults (or full copy with comments).
+See also [LOGGING.md](./LOGGING.md) and comments in [`.env.example`](../.env.example).

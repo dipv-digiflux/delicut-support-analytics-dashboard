@@ -36,7 +36,7 @@ Related: [ENV.md](./ENV.md) · [SYNC.md](./SYNC.md) · [FRESHCHAT_ADMIN_CHECKLIS
 
 | Filter | Meaning |
 |--------|---------|
-| **From / To** | Filter on conversation `created_at` using **UTC calendar days** of the picked dates (`REPORTING_TIMEZONE` is a display label only) |
+| **From / To** | Filter on conversation `created_at` as **calendar days in the selected timezone** (header: Dubai / IST / UTC; default Dubai). Converted to UTC for Mongo. |
 | **Subject / label** | Freshchat resolution label (`derived.subject`), or `unlabeled` |
 | **Agent** | `assigned_agent_id` (or `unassigned`) |
 | **Channel** | Exact `channel_name` |

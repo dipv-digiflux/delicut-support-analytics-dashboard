@@ -13,6 +13,7 @@ import {
 import { getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
+import { timezoneLabel } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,8 @@ export default async function DashboardPage({
         <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
         <p className="text-sm text-slate-500">
           Freshchat metrics for {filters.from} → {filters.to} (
-          {cfg.REPORTING_TIMEZONE}) — overall, by channel, and by who responded
+          {timezoneLabel(filters.timeZone)}) — overall, by channel, and by who
+          responded
         </p>
       </div>
 

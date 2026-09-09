@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
+import { TimezoneSwitcher } from "@/components/TimezoneSwitcher";
 import { getConfig } from "@/lib/config";
+import { resolveTimeZone, timezoneLabel } from "@/lib/timezone";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard" },
@@ -16,6 +19,7 @@ export default function AnalyticsLayout({
   const cfg = getConfig();
   const brand = cfg.APP_BRAND_NAME;
   const product = cfg.APP_PRODUCT_NAME;
+  const defaultTz = resolveTimeZone(cfg.REPORTING_TIMEZONE);
 
   return (
     <div className="flex min-h-screen">
@@ -39,16 +43,22 @@ export default function AnalyticsLayout({
             </Link>
           ))}
         </nav>
-        <div className="mt-auto px-2 pt-6 text-xs text-[var(--muted)]">
-          Freshchat extract · Local Mongo
+        <div className="mt-auto space-y-1 px-2 pt-6 text-xs text-[var(--muted)]">
+          <div>Freshchat extract · Local Mongo</div>
+          <div>Default TZ: {timezoneLabel(defaultTz)}</div>
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-white/90 px-6 py-3 backdrop-blur">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[var(--border)] bg-white/90 px-6 py-3 backdrop-blur">
           <div className="text-sm font-medium text-[var(--foreground)]">
             {brand} {product}
           </div>
-          <SyncStatusBadge />
+          <div className="flex items-center gap-4">
+            <Suspense fallback={null}>
+              <TimezoneSwitcher defaultTimeZone={defaultTz} />
+            </Suspense>
+            <SyncStatusBadge />
+          </div>
         </header>
         <main className="flex-1 px-6 py-6">{children}</main>
       </div>

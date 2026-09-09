@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { config as loadDotenv } from "dotenv";
 import path from "path";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 
-// Load .env first, then .env.local overrides (so filled local secrets win).
+// Load .env first, then .env.local overrides (local secrets win).
 loadDotenv({ path: path.resolve(process.cwd(), ".env") });
 loadDotenv({ path: path.resolve(process.cwd(), ".env.local"), override: true });
 
@@ -24,55 +25,96 @@ const boolish = z
   .transform((v) => v === true || v === "true")
   .default(false);
 
+/**
+ * App configuration.
+ *
+ * Put secrets + DB in `.env` / `.env.local`.
+ * Everything else has safe defaults here — only set in env when you need to override.
+ *
+ * See docs/ENV.md for the lean env list vs these defaults.
+ */
 const ConfigSchema = z.object({
+  // --- Secrets / connections (from env) ---
+  /** Freshchat API root, e.g. https://account.freshchat.com/v2 */
   FRESHCHAT_API_BASE: z
     .string()
     .optional()
     .default("")
-    // Freshchat rejects http:// with 401; always prefer https
     .transform((v) => v.replace(/^http:\/\//i, "https://")),
+  /** Freshchat Bearer token (Admin → API Tokens) */
   FRESHCHAT_API_TOKEN: z.string().optional().default(""),
+  /** Mongo connection string */
   MONGODB_URI: z.string().default("mongodb://127.0.0.1:27017"),
+  /** Mongo database name for analytics warehouse */
   MONGODB_DB: z.string().default("freshchat_analytics"),
   MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(10),
   MONGODB_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+
+  // --- Product / UI (defaults; optional env override) ---
+  /** Sidebar + document title brand */
+  APP_BRAND_NAME: z.string().default("Delicut"),
+  /** Product subtitle under brand */
+  APP_PRODUCT_NAME: z.string().default("Support Analytics"),
+  /**
+   * Default reporting timezone when URL/localStorage has no `tz`.
+   * UI dropdown: Asia/Dubai | Asia/Kolkata | UTC
+   */
+  REPORTING_TIMEZONE: z.string().default(DEFAULT_TIMEZONE),
+  /** Minutes without a completed sync before UI shows “stale” */
+  SYNC_STALE_AFTER_MINUTES: z.coerce.number().int().positive().default(60),
+  /** Default From/To window length (days) when URL has no dates */
+  DASHBOARD_DEFAULT_RANGE_DAYS: z.coerce.number().int().positive().default(30),
+  /** Default rows-per-page for tables */
+  UI_DEFAULT_PAGE_SIZE: z.coerce.number().int().positive().default(25),
+  /** Max hits from agent/customer/channel directory APIs */
+  DIRECTORY_SEARCH_LIMIT: z.coerce.number().int().positive().default(40),
+  /** Messages per page in customer chat history */
+  CUSTOMER_CHAT_PAGE_SIZE: z.coerce.number().int().positive().default(50),
+  /** Soft cap for CSV export rows */
+  EXPORT_CSV_MAX_ROWS: z.coerce.number().int().positive().default(10000),
+  /** Optional Bearer secret for /api/* (empty = open for local) */
+  DASHBOARD_API_SECRET: z.string().optional().default(""),
+
+  // --- Sync (defaults; override only if needed) ---
+  /** First-run lookback when no cursor exists */
   SYNC_LOOKBACK_DAYS: z.coerce.number().int().positive().default(30),
   SYNC_TRANSCRIPT_OVERLAP_HOURS: z.coerce.number().int().positive().default(24),
   SYNC_CSAT_OVERLAP_DAYS: z.coerce.number().int().positive().default(2),
   SYNC_LABEL_OVERLAP_DAYS: z.coerce.number().int().positive().default(2),
+  /** Comma-separated Extract event names */
   SYNC_EVENTS: z.string().default(
     "Chat-Transcript,CSAT-Score,Conversation-Resolution-Label,Conversation-Created,Conversation-Resolved,First-Response-Time,Resolution-Time",
   ),
+
+  // --- Extract API budget ---
   EXTRACT_MIN_POST_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
   EXTRACT_MAX_JOBS_PER_DAY: z.coerce.number().int().positive().default(120),
   EXTRACT_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(20000),
   EXTRACT_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(4500000),
   EXTRACT_CACHE_DIR: z.string().default(".cache/extracts"),
+
+  // --- HTTP client ---
   HTTP_MAX_RETRIES: z.coerce.number().int().nonnegative().default(5),
   HTTP_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(1000),
   HTTP_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(60000),
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   HTTP_DOWNLOAD_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
+
+  // --- Storage shaping ---
   BULK_BATCH_SIZE: z.coerce.number().int().positive().default(500),
   MAX_EMBEDDED_MESSAGES: z.coerce.number().int().positive().default(500),
   USER_FETCH_BATCH_SIZE: z.coerce.number().int().positive().default(100),
   USER_ENRICH_MAX_PER_RUN: z.coerce.number().int().positive().default(1000),
   USER_REFRESH_DAYS: z.coerce.number().int().positive().default(30),
+
+  // --- Classification (off = Freshchat labels only) ---
   CLASSIFY_ENABLED: boolish,
   CLASSIFIER_VERSION: z.string().default("kw-v1"),
   CLASSIFY_MESSAGE_WINDOW: z.coerce.number().int().positive().default(5),
   CLASSIFY_MIN_SCORE: z.coerce.number().int().positive().default(3),
   CLASSIFY_LLM_ENABLED: boolish,
-  APP_BRAND_NAME: z.string().default("Delicut"),
-  APP_PRODUCT_NAME: z.string().default("Support Analytics"),
-  REPORTING_TIMEZONE: z.string().default("Asia/Dubai"),
-  SYNC_STALE_AFTER_MINUTES: z.coerce.number().int().positive().default(60),
-  DASHBOARD_DEFAULT_RANGE_DAYS: z.coerce.number().int().positive().default(30),
-  UI_DEFAULT_PAGE_SIZE: z.coerce.number().int().positive().default(25),
-  DIRECTORY_SEARCH_LIMIT: z.coerce.number().int().positive().default(40),
-  CUSTOMER_CHAT_PAGE_SIZE: z.coerce.number().int().positive().default(50),
-  EXPORT_CSV_MAX_ROWS: z.coerce.number().int().positive().default(10000),
-  DASHBOARD_API_SECRET: z.string().optional().default(""),
+
+  // --- Logging ---
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LOG_FORMAT: z.enum(["auto", "tty", "json"]).default("auto"),
   LOG_TO_FILE: z

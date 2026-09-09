@@ -1,6 +1,14 @@
+import {
+  DEFAULT_TIMEZONE,
+  resolveTimeZone,
+  zonedDayRangeUtc,
+} from "@/lib/timezone";
+
 export interface ConversationFilters {
   from?: string;
   to?: string;
+  /** IANA timezone for interpreting from/to calendar days (Dubai / IST / UTC) */
+  timeZone: string;
   subject?: string;
   /** @deprecated prefer agentIds — single agent or "unassigned" */
   agent?: string;
@@ -76,6 +84,7 @@ export function parseFilters(
   return {
     from: get("from"),
     to: get("to"),
+    timeZone: resolveTimeZone(get("tz"), DEFAULT_TIMEZONE),
     subject: get("subject"),
     agent: agentIds.length <= 1 ? agentIds[0] || agent : undefined,
     agentIds: agentIds.filter((id) => id !== "unassigned" || agentIds.length === 1),
@@ -93,23 +102,18 @@ export function parseFilters(
   };
 }
 
-/** Inclusive calendar dates as UTC days of `from`/`to` (YYYY-MM-DD).  
- * `REPORTING_TIMEZONE` is a display label only — date filters are UTC. */
+/** Inclusive calendar dates of `from`/`to` interpreted in `filters.timeZone`. */
 export function buildConversationMatch(
   filters: ConversationFilters,
 ): Record<string, unknown> {
   const and: object[] = [];
 
   if (filters.from || filters.to) {
-    const range: Record<string, Date> = {};
-    if (filters.from) {
-      range.$gte = new Date(`${filters.from}T00:00:00.000Z`);
-    }
-    if (filters.to) {
-      const end = new Date(`${filters.to}T00:00:00.000Z`);
-      end.setUTCDate(end.getUTCDate() + 1);
-      range.$lt = end;
-    }
+    const range = zonedDayRangeUtc(
+      filters.from,
+      filters.to,
+      filters.timeZone || DEFAULT_TIMEZONE,
+    );
     and.push({ created_at: range });
   }
 
@@ -259,6 +263,7 @@ export function filtersToQuery(filters: ConversationFilters): string {
   };
   set("from", filters.from);
   set("to", filters.to);
+  set("tz", filters.timeZone);
   set("subject", filters.subject);
   set("channel", filters.channel);
   set("group", filters.group);
