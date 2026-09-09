@@ -307,6 +307,221 @@ export async function getKpis(filters: ConversationFilters) {
     ],
   });
 
+  const tz = filters.timeZone || "Asia/Dubai";
+
+  const [
+    volumeHeatmapRaw,
+    frtBucketsRaw,
+    resolveBucketsRaw,
+    actorShareRaw,
+    resolvedMixRaw,
+    csatByChannelRaw,
+    labelTrendRaw,
+  ] = await Promise.all([
+    conversations
+      .aggregate([
+        { $match: { ...match, created_at: { $ne: null } } },
+        {
+          $group: {
+            _id: {
+              dow: {
+                $dayOfWeek: { date: "$created_at", timezone: tz },
+              },
+              hour: {
+                $hour: { date: "$created_at", timezone: tz },
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray(),
+    conversations
+      .aggregate([
+        {
+          $match: {
+            ...match,
+            "metrics.first_response_time_seconds": { $ne: null },
+          },
+        },
+        {
+          $bucket: {
+            groupBy: "$metrics.first_response_time_seconds",
+            boundaries: [0, 60, 300, 900, 3600, 14400, 99999999],
+            default: "other",
+            output: { count: { $sum: 1 } },
+          },
+        },
+      ])
+      .toArray(),
+    conversations
+      .aggregate([
+        {
+          $match: {
+            ...match,
+            "metrics.resolution_time_seconds": { $ne: null },
+          },
+        },
+        {
+          $bucket: {
+            groupBy: "$metrics.resolution_time_seconds",
+            boundaries: [0, 900, 3600, 14400, 86400, 259200, 99999999],
+            default: "other",
+            output: { count: { $sum: 1 } },
+          },
+        },
+      ])
+      .toArray(),
+    conversations
+      .aggregate([
+        { $match: match },
+        { $unwind: "$messages" },
+        {
+          $group: {
+            _id: { $ifNull: ["$messages.actor_type", "unknown"] },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { count: -1 } },
+      ])
+      .toArray(),
+    conversations
+      .aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: {
+              $cond: [{ $eq: ["$resolved", true] }, "Resolved", "Open"],
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray(),
+    conversations
+      .aggregate([
+        {
+          $match: {
+            ...match,
+            "csat.rating": { $ne: null },
+            channel_name: { $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: "$channel_name",
+            average: { $avg: "$csat.rating" },
+            ratedCount: { $sum: 1 },
+          },
+        },
+        { $sort: { ratedCount: -1 } },
+        { $limit: 10 },
+      ])
+      .toArray(),
+    conversations
+      .aggregate([
+        { $match: { ...match, created_at: { $ne: null } } },
+        {
+          $addFields: {
+            _label: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: ["$derived.subject", null] },
+                    { $eq: ["$derived.subject", ""] },
+                    { $eq: [{ $ifNull: ["$resolution.label", ""] }, ""] },
+                  ],
+                },
+                "unlabeled",
+                {
+                  $ifNull: [
+                    "$derived.subject",
+                    { $ifNull: ["$resolution.label", "unlabeled"] },
+                  ],
+                },
+              ],
+            },
+            _day: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$created_at",
+                timezone: tz,
+              },
+            },
+          },
+        },
+        {
+          $group: {
+            _id: { day: "$_day", label: "$_label" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { "_id.day": 1 } },
+      ])
+      .toArray(),
+  ]);
+
+  const FRT_BUCKET_LABELS = [
+    { key: 0, label: "<1m" },
+    { key: 60, label: "1–5m" },
+    { key: 300, label: "5–15m" },
+    { key: 900, label: "15–60m" },
+    { key: 3600, label: "1–4h" },
+    { key: 14400, label: ">4h" },
+  ];
+  const RES_BUCKET_LABELS = [
+    { key: 0, label: "<15m" },
+    { key: 900, label: "15–60m" },
+    { key: 3600, label: "1–4h" },
+    { key: 14400, label: "4–24h" },
+    { key: 86400, label: "1–3d" },
+    { key: 259200, label: ">3d" },
+  ];
+
+  const frtMap = new Map(
+    frtBucketsRaw.map((b) => [b._id as number | string, b.count as number]),
+  );
+  const resMap = new Map(
+    resolveBucketsRaw.map((b) => [b._id as number | string, b.count as number]),
+  );
+
+  // Heatmap: Mongo $dayOfWeek 1=Sun … 7=Sat → display Mon–Sun
+  const heatmapCells = volumeHeatmapRaw.map((r) => {
+    const mongoDow = Number(r._id.dow); // 1 Sun .. 7 Sat
+    const weekday = mongoDow === 1 ? 6 : mongoDow - 2; // 0 Mon .. 6 Sun
+    return {
+      weekday,
+      hour: Number(r._id.hour),
+      count: r.count as number,
+    };
+  });
+
+  // Label trend: keep top 5 labels by total, then series by day
+  const labelTotals = new Map<string, number>();
+  for (const row of labelTrendRaw) {
+    const label = String(row._id.label);
+    labelTotals.set(label, (labelTotals.get(label) || 0) + (row.count as number));
+  }
+  const topLabels = [...labelTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([l]) => l);
+  const labelDays = [
+    ...new Set(labelTrendRaw.map((r) => String(r._id.day))),
+  ].sort();
+  const labelTrend = {
+    days: labelDays,
+    series: topLabels.map((label) => ({
+      label,
+      counts: labelDays.map((day) => {
+        const hit = labelTrendRaw.find(
+          (r) => String(r._id.day) === day && String(r._id.label) === label,
+        );
+        return (hit?.count as number) || 0;
+      }),
+    })),
+  };
+
   return {
     kpis: {
       total,
@@ -365,6 +580,29 @@ export async function getKpis(filters: ConversationFilters) {
         agentName: a.name,
         count: a.conversations,
       })),
+      volumeHeatmap: heatmapCells,
+      frtDistribution: FRT_BUCKET_LABELS.map((b) => ({
+        bucket: b.label,
+        count: frtMap.get(b.key) || 0,
+      })),
+      resolutionDistribution: RES_BUCKET_LABELS.map((b) => ({
+        bucket: b.label,
+        count: resMap.get(b.key) || 0,
+      })),
+      actorShare: actorShareRaw.map((a) => ({
+        actor: String(a._id),
+        count: a.count as number,
+      })),
+      resolvedMix: resolvedMixRaw.map((r) => ({
+        status: String(r._id),
+        count: r.count as number,
+      })),
+      csatByChannel: csatByChannelRaw.map((c) => ({
+        channel: String(c._id),
+        average: Number(c.average?.toFixed?.(2) ?? c.average),
+        ratedCount: c.ratedCount as number,
+      })),
+      labelTrend,
     },
     breakdowns: {
       byChannel: channelDeep,

@@ -133,12 +133,15 @@ Changing filters recalculates **every** KPI, chart, and breakdown for the same m
 | **CSAT distribution** | Counts of scores 1–5 | Shape of satisfaction | 🟢 + click → `csat=N` |
 | **By channel** | Conversation count per `channel_name` | Where volume lands | 🟢 + click → channel |
 | **By Freshchat label** | Count per resolution label | Topic mix (unlabeled bucket if empty) | 🟢 + click → subject |
-| **Label trend over time** 🆕 | Count per label, stacked by day/week | Are certain issue types rising or falling? | 📋 |
+| **Label trend over time** 🆕 | Count per label, stacked by day/week | Are certain issue types rising or falling? | 🟢 top-5 line trend |
 | **Who's responding — volume** | Chats per assigned agent | Workload | 🟢 + click → agent |
 | **Avg CSAT by agent** | Avg CSAT per agent | Quality by responder (`*` if n < 3) | 🟢 + click → agent |
-| **Bot vs human message share** 🆕 | % of messages by `sender_type` | Automation coverage | 📋 |
-| **Volume heatmap (day × hour)** 🆕 | Conversation count by weekday and hour | Staffing / peak-time planning | 📋 |
-| **FRT distribution** 🆕 | Histogram of first-response seconds | Shows tail/outliers avg hides | 📋 |
+| **Bot vs human message share** 🆕 | % of messages by `sender_type` | Automation coverage | 🟢 actor doughnut |
+| **Volume heatmap (day × hour)** 🆕 | Conversation count by weekday and hour | Staffing / peak-time planning | 🟢 |
+| **FRT distribution** 🆕 | Histogram of first-response seconds | Shows tail/outliers avg hides | 🟢 |
+| **Resolution time distribution** 🆕 | Histogram of resolve seconds | Close-out speed shape | 🟢 |
+| **Resolved vs open** 🆕 | Doughnut of resolved/open | Pipeline mix | 🟢 |
+| **Avg CSAT by channel** 🆕 | Channel CSAT averages | Channel quality | 🟢 |
 | **SLA breach trend** 🆕 | Daily % of chats breaching SLA | Track SLA health over time | 📋 |
 | **Priority mix over time** 🆕 | Stacked count by priority per day | Only if priority field present | 📋 |
 | **Time-to-assignment distribution** ✅🆕 | Histogram of `assigned_at − created_at` | Handoff delay | 📋 |

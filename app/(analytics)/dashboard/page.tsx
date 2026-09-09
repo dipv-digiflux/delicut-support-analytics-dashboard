@@ -10,6 +10,13 @@ import {
   DailyVolumeChart,
   ChannelBarChart,
   AgentVolumeChart,
+  ResolvedMixChart,
+  ActorShareChart,
+  FrtDistributionChart,
+  ResolutionDistributionChart,
+  CsatByChannelChart,
+  LabelTrendChart,
+  VolumeHeatmapChart,
 } from "@/components/charts/Charts";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { getKpis, getSyncStatus } from "@/lib/aggregations";
@@ -242,6 +249,11 @@ export default async function DashboardPage({
           data={data?.charts.csatDistribution || []}
           baseQuery={baseQuery}
         />
+        <ResolvedMixChart
+          data={data?.charts.resolvedMix || []}
+          baseQuery={baseQuery}
+        />
+        <ActorShareChart data={data?.charts.actorShare || []} />
         <ChannelBarChart
           data={data?.charts.byChannel || []}
           baseQuery={baseQuery}
@@ -256,6 +268,34 @@ export default async function DashboardPage({
         />
         <AgentCsatChart
           data={data?.charts.averageCsatByAgent || []}
+          baseQuery={baseQuery}
+        />
+        <CsatByChannelChart
+          data={data?.charts.csatByChannel || []}
+          baseQuery={baseQuery}
+        />
+        <FrtDistributionChart
+          data={data?.charts.frtDistribution || []}
+          baseQuery={baseQuery}
+        />
+        <ResolutionDistributionChart
+          data={data?.charts.resolutionDistribution || []}
+          baseQuery={baseQuery}
+        />
+      </div>
+
+      <SectionTitle tip="Deeper patterns from the same filtered conversation set.">
+        Patterns
+      </SectionTitle>
+      <div className="mb-6 grid gap-3 lg:grid-cols-2">
+        <VolumeHeatmapChart
+          data={data?.charts.volumeHeatmap || []}
+          baseQuery={baseQuery}
+        />
+        <LabelTrendChart
+          data={
+            data?.charts.labelTrend || { days: [], series: [] }
+          }
           baseQuery={baseQuery}
         />
       </div>
