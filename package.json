@@ -1,0 +1,43 @@
+{
+  "name": "freshchat-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:init": "tsx scripts/init-db.ts",
+    "sync": "tsx scripts/sync.ts",
+    "sync:year": "tsx scripts/sync-year.ts",
+    "verify": "tsx scripts/verify.ts",
+    "reclassify": "tsx scripts/reclassify.ts"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.8",
+    "cli-progress": "^3.12.0",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7",
+    "mongodb": "^6.14.2",
+    "next": "^15.2.2",
+    "picocolors": "^1.1.1",
+    "react": "^19.0.0",
+    "react-chartjs-2": "^5.3.0",
+    "react-dom": "^19.0.0",
+    "ulid": "^2.3.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@tailwindcss/postcss": "^4.0.14",
+    "@types/cli-progress": "^3.11.6",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "eslint": "^9.22.0",
+    "eslint-config-next": "^15.2.2",
+    "tailwindcss": "^4.0.14",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

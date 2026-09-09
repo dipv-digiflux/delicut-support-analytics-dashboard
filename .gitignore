@@ -1,0 +1,11 @@
+.github/
+.next/
+node_modules/
+.cache/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+graphify-out/
+*.tsbuildinfo
