@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { FilterBar } from "@/components/FilterBar";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import {
@@ -13,7 +14,9 @@ import {
 import { InfoTip } from "@/components/ui/InfoTip";
 import { getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
+import { conversationsHref } from "@/lib/dashboard-links";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
+import { filtersToQuery } from "@/lib/filters";
 import { timezoneLabel } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +49,9 @@ export default async function DashboardPage({
 
   const cfg = getConfig();
   const k = data?.kpis;
+  const baseQuery = filtersToQuery(filters);
+  const raw = (patch: Record<string, string | null | undefined> = {}) =>
+    conversationsHref(filters, patch);
 
   return (
     <div>
@@ -88,35 +94,40 @@ export default async function DashboardPage({
         </div>
       )}
 
-      <SectionTitle tip="Headline metrics for conversations matching the filters above.">
+      <SectionTitle tip="Headline metrics for conversations matching the filters above. Click a tile to open matching raw conversations.">
         Overall KPIs
       </SectionTitle>
       <div className="mb-6 grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         <Kpi
           label="Conversations"
-          tip="Count of Freshchat conversations in range (one row per conversation_id)."
+          tip="Count of Freshchat conversations in range (one row per conversation_id). Click to open the table."
           value={fmtInt(k?.total)}
+          href={raw()}
         />
         <Kpi
           label="Open chats"
           tip="Conversations not marked resolved."
           value={fmtInt(k?.openCount)}
           footnote={k ? `${fmtPct(k.openRate)} of total` : undefined}
+          href={raw({ resolved: "false" })}
         />
         <Kpi
           label="Unique users"
           tip="Distinct primary_user_id values (customers)."
           value={fmtInt(k?.uniqueUsers)}
+          href={`/users?${baseQuery}`}
         />
         <Kpi
           label="Resolution rate"
           tip="resolved=true ÷ total conversations."
           value={fmtPct(k?.resolutionRate)}
+          href={raw({ resolved: "true" })}
         />
         <Kpi
           label="Reopen rate"
           tip="reopened=true ÷ total (Freshchat reopen flag when present)."
           value={fmtPct(k?.reopenRate)}
+          href={raw({ reopened: "true" })}
         />
         <Kpi
           label="Avg CSAT"
@@ -125,103 +136,141 @@ export default async function DashboardPage({
           footnote={
             k ? `Based on ${k.ratedCount} of ${k.total} rated` : undefined
           }
+          href={raw({ csat: "rated" })}
         />
         <Kpi
           label="% Satisfied (≥4)"
           tip="Ratings ≥4 ÷ rated count."
           value={fmtPct(k?.satisfiedRate)}
+          href={raw({ csat: "satisfied" })}
         />
         <Kpi
           label="% Dissatisfied (≤2)"
           tip="Ratings ≤2 ÷ rated count."
           value={fmtPct(k?.dissatisfiedRate)}
+          href={raw({ csat: "dissatisfied" })}
         />
         <Kpi
           label="CSAT response rate"
           tip="Rated chats ÷ total conversations."
           value={fmtPct(k?.csatResponseRate)}
+          href={raw({ csat: "rated" })}
         />
         <Kpi
           label="Label coverage"
           tip="Chats with a non-empty Freshchat resolution label ÷ total."
           value={fmtPct(k?.labelCoverage)}
+          href={raw()}
         />
         <Kpi
           label="Avg messages / chat"
           tip="Sum of message_count ÷ conversations."
           value={fmtNum(k?.avgMessages)}
+          href={raw()}
         />
         <Kpi
           label="With attachments"
           tip="Chats that include at least one attachment in the transcript."
           value={fmtInt(k?.chatsWithAttachments)}
           footnote={k ? `${fmtPct(k.attachmentRate)} of total` : undefined}
+          href={raw()}
         />
         <Kpi
           label="Avg first response"
           tip="Average first-response-time seconds from Freshchat Extract (chats with FRT only)."
           value={fmtDuration(k?.avgFirstResponseSeconds)}
+          href={raw()}
         />
         <Kpi
           label="Median FRT"
           tip="Median first-response time — less skewed by outliers than the average."
           value={fmtDuration(k?.medianFirstResponseSeconds)}
+          href={raw()}
         />
         <Kpi
           label="Avg resolution time"
           tip="Average resolution-time seconds from Extract."
           value={fmtDuration(k?.avgResolutionSeconds)}
+          href={raw({ resolved: "true" })}
         />
         <Kpi
           label="Median resolution"
           tip="Median time to resolve among chats with resolution-time data."
           value={fmtDuration(k?.medianResolutionSeconds)}
+          href={raw({ resolved: "true" })}
         />
         <Kpi
           label="Unassigned chats"
           tip="No assigned_agent_id on the conversation."
           value={fmtInt(k?.unassignedCount)}
           footnote={k ? `${fmtPct(k.unassignedRate)} of total` : undefined}
+          href={raw({ agent: "unassigned" })}
         />
         <Kpi
           label="Responders"
           tip="Distinct assigned agents appearing in this filter range."
           value={fmtInt(k?.agentCount)}
+          href={raw()}
         />
         <Kpi
           label="Channels"
           tip="Distinct channel_name values in range."
           value={fmtInt(k?.channelCount)}
+          href={raw()}
         />
         <Kpi
           label="Groups"
           tip="Distinct Freshchat groups in range."
           value={fmtInt(k?.groupCount)}
+          href={raw()}
         />
       </div>
 
-      <SectionTitle tip="Compact charts — hover for exact values. Same filters as KPIs.">
+      <SectionTitle tip="Click a bar/slice/point to open matching conversations with the same date range and filters.">
         Trends & distribution
       </SectionTitle>
       <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <DailyVolumeChart data={data?.charts.dailyVolume || []} />
-        <DailyCsatChart data={data?.charts.dailyCsat || []} />
-        <CsatDistributionChart data={data?.charts.csatDistribution || []} />
-        <ChannelBarChart data={data?.charts.byChannel || []} />
-        <SubjectBarChart data={data?.charts.bySubject || []} />
-        <AgentVolumeChart data={data?.charts.agentVolume || []} />
-        <AgentCsatChart data={data?.charts.averageCsatByAgent || []} />
+        <DailyVolumeChart
+          data={data?.charts.dailyVolume || []}
+          baseQuery={baseQuery}
+        />
+        <DailyCsatChart
+          data={data?.charts.dailyCsat || []}
+          baseQuery={baseQuery}
+        />
+        <CsatDistributionChart
+          data={data?.charts.csatDistribution || []}
+          baseQuery={baseQuery}
+        />
+        <ChannelBarChart
+          data={data?.charts.byChannel || []}
+          baseQuery={baseQuery}
+        />
+        <SubjectBarChart
+          data={data?.charts.bySubject || []}
+          baseQuery={baseQuery}
+        />
+        <AgentVolumeChart
+          data={data?.charts.agentVolume || []}
+          baseQuery={baseQuery}
+        />
+        <AgentCsatChart
+          data={data?.charts.averageCsatByAgent || []}
+          baseQuery={baseQuery}
+        />
       </div>
 
-      <SectionTitle tip="Deep breakdown: volume, resolution, CSAT, FRT, and resolution time per dimension.">
+      <SectionTitle tip="Deep breakdown: click a row name to open matching conversations.">
         By channel (in depth)
       </SectionTitle>
       <div className="mb-6">
         <BreakdownTable
           title="Channel performance"
-          subtitle="Volume, resolution, CSAT, and response times per Freshchat channel"
+          subtitle="Volume, resolution, CSAT, and response times per Freshchat channel — click name for raw data"
           nameHeader="Channel"
           rows={data?.breakdowns.byChannel || []}
+          baseQuery={baseQuery}
+          linkKind="channel"
         />
       </div>
 
@@ -231,9 +280,11 @@ export default async function DashboardPage({
       <div className="mb-6">
         <BreakdownTable
           title="Responder performance"
-          subtitle="Assigned agent — chats handled, CSAT, FRT, resolution time"
+          subtitle="Assigned agent — click name to open their conversations"
           nameHeader="Responder"
           rows={data?.breakdowns.byAgent || []}
+          baseQuery={baseQuery}
+          linkKind="agent"
         />
       </div>
 
@@ -243,9 +294,11 @@ export default async function DashboardPage({
       <div className="mb-4">
         <BreakdownTable
           title="Group performance"
-          subtitle="Freshchat group routing dimension"
+          subtitle="Freshchat group routing — click name for raw data"
           nameHeader="Group"
           rows={data?.breakdowns.byGroup || []}
+          baseQuery={baseQuery}
+          linkKind="group"
         />
       </div>
     </div>
@@ -272,14 +325,16 @@ function Kpi({
   value,
   footnote,
   tip,
+  href,
 }: {
   label: string;
   value: string;
   footnote?: string;
   tip?: string;
+  href?: string;
 }) {
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-white p-2.5">
+  const inner = (
+    <>
       <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
         {label}
         {tip && <InfoTip text={tip} />}
@@ -290,6 +345,24 @@ function Kpi({
       {footnote && (
         <div className="mt-0.5 text-[10px] text-[var(--muted)]">{footnote}</div>
       )}
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block rounded-lg border border-[var(--border)] bg-white p-2.5 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
+        title="Open matching conversations"
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-white p-2.5">
+      {inner}
     </div>
   );
 }

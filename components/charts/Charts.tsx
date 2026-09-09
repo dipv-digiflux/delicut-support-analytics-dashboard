@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,9 +12,12 @@ import {
   Tooltip,
   Legend,
   Filler,
+  type ChartEvent,
+  type ActiveElement,
 } from "chart.js";
 import { Line, Doughnut, Bar } from "react-chartjs-2";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { conversationsHrefFromQuery } from "@/lib/dashboard-links";
 
 ChartJS.register(
   CategoryScale,
@@ -40,15 +44,37 @@ const compactOpts = {
   },
 };
 
+function useNavigateQuery(baseQuery: string) {
+  const router = useRouter();
+  return (patch: Record<string, string | null | undefined>) => {
+    router.push(conversationsHrefFromQuery(baseQuery, patch));
+  };
+}
+
+function clickIndex(
+  _event: ChartEvent,
+  elements: ActiveElement[],
+  onIndex: (index: number) => void,
+) {
+  if (!elements.length) return;
+  const idx = elements[0]?.index;
+  if (idx == null) return;
+  onIndex(idx);
+}
+
 export function DailyCsatChart({
   data,
+  baseQuery = "",
 }: {
   data: { date: string; average: number; ratedCount: number }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   return (
     <ChartCard
       title="Daily CSAT trend"
-      tip="Average CSAT by conversation created day (rated chats only). Hover a point for rated count."
+      tip="Average CSAT by day. Click a point to open that day's conversations."
+      clickable
     >
       {data.length === 0 ? (
         <Empty />
@@ -69,6 +95,15 @@ export function DailyCsatChart({
           }}
           options={{
             ...compactOpts,
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const day = data[i]?.date;
+                if (day) go({ from: day, to: day });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             plugins: {
               ...compactOpts.plugins,
               tooltip: {
@@ -83,7 +118,12 @@ export function DailyCsatChart({
             scales: {
               y: { min: 1, max: 5, ticks: { color: slate, font: { size: 10 } } },
               x: {
-                ticks: { color: slate, maxRotation: 0, font: { size: 9 }, maxTicksLimit: 8 },
+                ticks: {
+                  color: slate,
+                  maxRotation: 0,
+                  font: { size: 9 },
+                  maxTicksLimit: 8,
+                },
               },
             },
           }}
@@ -95,14 +135,18 @@ export function DailyCsatChart({
 
 export function CsatDistributionChart({
   data,
+  baseQuery = "",
 }: {
   data: { rating: number; count: number }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   const total = data.reduce((s, d) => s + d.count, 0);
   return (
     <ChartCard
       title="CSAT distribution"
-      tip="Count of ratings 1–5 in the filtered range. Unrated chats are excluded."
+      tip="Count of ratings 1–5. Click a slice to open conversations with that score."
+      clickable
     >
       {total === 0 ? (
         <Empty />
@@ -121,13 +165,27 @@ export function CsatDistributionChart({
           options={{
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const rating = data[i]?.rating;
+                if (rating != null) go({ csat: String(rating) });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             plugins: {
-              legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+              legend: {
+                position: "bottom",
+                labels: { boxWidth: 10, font: { size: 10 } },
+              },
               tooltip: {
                 callbacks: {
                   afterLabel: (ctx) => {
                     const n = Number(ctx.raw) || 0;
-                    return total ? `${((n / total) * 100).toFixed(1)}% of rated` : "";
+                    return total
+                      ? `${((n / total) * 100).toFixed(1)}% of rated`
+                      : "";
                   },
                 },
               },
@@ -141,13 +199,17 @@ export function CsatDistributionChart({
 
 export function SubjectBarChart({
   data,
+  baseQuery = "",
 }: {
   data: { subject: string; label: string; count: number }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   return (
     <ChartCard
       title="By Freshchat label"
-      tip="Conversation volume by resolution label from Freshchat (not invented topics)."
+      tip="Volume by resolution label. Click a bar to open matching conversations."
+      clickable
     >
       {data.length === 0 ? (
         <Empty />
@@ -155,11 +217,22 @@ export function SubjectBarChart({
         <Bar
           data={{
             labels: data.map((d) => d.label),
-            datasets: [{ data: data.map((d) => d.count), backgroundColor: blue }],
+            datasets: [
+              { data: data.map((d) => d.count), backgroundColor: blue },
+            ],
           }}
           options={{
             ...compactOpts,
             indexAxis: "y",
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const subject = data[i]?.subject || data[i]?.label;
+                if (subject) go({ subject });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             scales: {
               x: { ticks: { color: slate, font: { size: 10 } } },
               y: { ticks: { color: slate, font: { size: 10 } } },
@@ -173,13 +246,17 @@ export function SubjectBarChart({
 
 export function DailyVolumeChart({
   data,
+  baseQuery = "",
 }: {
   data: { date: string; count: number; resolved: number }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   return (
     <ChartCard
       title="Daily volume"
-      tip="Created vs resolved-by-day for conversations matching current filters."
+      tip="Created vs resolved by day. Click a bar to open that day's chats."
+      clickable
     >
       {data.length === 0 ? (
         <Empty />
@@ -203,12 +280,35 @@ export function DailyVolumeChart({
           options={{
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const day = data[i]?.date;
+                if (!day) return;
+                const datasetIndex = els[0]?.datasetIndex ?? 0;
+                go({
+                  from: day,
+                  to: day,
+                  resolved: datasetIndex === 1 ? "true" : null,
+                });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             plugins: {
-              legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+              legend: {
+                position: "bottom",
+                labels: { boxWidth: 10, font: { size: 10 } },
+              },
             },
             scales: {
               x: {
-                ticks: { color: slate, maxRotation: 0, font: { size: 9 }, maxTicksLimit: 8 },
+                ticks: {
+                  color: slate,
+                  maxRotation: 0,
+                  font: { size: 9 },
+                  maxTicksLimit: 8,
+                },
               },
               y: { ticks: { color: slate, font: { size: 10 } } },
             },
@@ -221,13 +321,17 @@ export function DailyVolumeChart({
 
 export function ChannelBarChart({
   data,
+  baseQuery = "",
 }: {
   data: { channel: string; count: number }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   return (
     <ChartCard
       title="By channel"
-      tip="Conversation count per Freshchat channel (WhatsApp, IG, Phone, etc.)."
+      tip="Volume per channel. Click a bar to open that channel's conversations."
+      clickable
     >
       {data.length === 0 ? (
         <Empty />
@@ -235,11 +339,25 @@ export function ChannelBarChart({
         <Bar
           data={{
             labels: data.map((d) => d.channel),
-            datasets: [{ data: data.map((d) => d.count), backgroundColor: "#6366f1" }],
+            datasets: [
+              {
+                data: data.map((d) => d.count),
+                backgroundColor: "#6366f1",
+              },
+            ],
           }}
           options={{
             ...compactOpts,
             indexAxis: "y",
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const channel = data[i]?.channel;
+                if (channel) go({ channel });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             scales: {
               x: { ticks: { color: slate, font: { size: 10 } } },
               y: { ticks: { color: slate, font: { size: 10 } } },
@@ -253,6 +371,7 @@ export function ChannelBarChart({
 
 export function AgentCsatChart({
   data,
+  baseQuery = "",
 }: {
   data: {
     agentId: string;
@@ -260,11 +379,14 @@ export function AgentCsatChart({
     average: number;
     ratedCount: number;
   }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   return (
     <ChartCard
       title="Avg CSAT by responder"
-      tip="Average CSAT for assigned agent. * means fewer than 3 ratings — treat carefully."
+      tip="CSAT by assigned agent. Click a bar to open that responder's chats."
+      clickable
     >
       {data.length === 0 ? (
         <Empty />
@@ -281,6 +403,15 @@ export function AgentCsatChart({
           options={{
             ...compactOpts,
             indexAxis: "y",
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const id = data[i]?.agentId;
+                if (id) go({ agent: id, csat: "rated" });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             plugins: {
               ...compactOpts.plugins,
               tooltip: {
@@ -305,13 +436,17 @@ export function AgentCsatChart({
 
 export function AgentVolumeChart({
   data,
+  baseQuery = "",
 }: {
   data: { agentId: string; agentName: string; count: number }[];
+  baseQuery?: string;
 }) {
+  const go = useNavigateQuery(baseQuery);
   return (
     <ChartCard
       title="Responder volume"
-      tip="How many chats each assigned agent handled in the filter range."
+      tip="Chats per assigned agent. Click a bar to open that responder's conversations."
+      clickable
     >
       {data.length === 0 ? (
         <Empty />
@@ -326,6 +461,15 @@ export function AgentVolumeChart({
           options={{
             ...compactOpts,
             indexAxis: "y",
+            onClick: (e, els) =>
+              clickIndex(e, els, (i) => {
+                const id = data[i]?.agentId;
+                if (id) go({ agent: id });
+              }),
+            onHover: (event, elements) => {
+              const canvas = event.native?.target as HTMLElement | undefined;
+              if (canvas) canvas.style.cursor = elements.length ? "pointer" : "default";
+            },
             scales: {
               x: { ticks: { color: slate, font: { size: 10 } } },
               y: { ticks: { color: slate, font: { size: 10 } } },
@@ -340,10 +484,12 @@ export function AgentVolumeChart({
 function ChartCard({
   title,
   tip,
+  clickable,
   children,
 }: {
   title: string;
   tip?: string;
+  clickable?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -351,6 +497,11 @@ function ChartCard({
       <h3 className="mb-2 flex items-center text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
         {title}
         {tip && <InfoTip text={tip} />}
+        {clickable && (
+          <span className="ml-auto text-[10px] font-normal normal-case tracking-normal text-[var(--muted)]">
+            click → raw data
+          </span>
+        )}
       </h3>
       <div className="h-[160px]">{children}</div>
     </div>

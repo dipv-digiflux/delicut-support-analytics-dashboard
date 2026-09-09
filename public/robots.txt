@@ -1,0 +1,3 @@
+# Private Delicut support analytics — do not crawl or index.
+User-agent: *
+Disallow: /

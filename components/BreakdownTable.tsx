@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
+import { conversationsHrefFromQuery } from "@/lib/dashboard-links";
 
 function fmtPct(n: number | null | undefined) {
   if (n == null) return "—";
@@ -80,11 +82,17 @@ export function BreakdownTable({
   subtitle,
   rows,
   nameHeader = "Name",
+  baseQuery = "",
+  linkKind,
 }: {
   title: string;
   subtitle?: string;
   rows: BreakdownRow[];
   nameHeader?: string;
+  /** Current dashboard filters as query string (serializable). */
+  baseQuery?: string;
+  /** Build Conversations links for row names (serializable — no server→client functions). */
+  linkKind?: "channel" | "agent" | "group";
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("conversations");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
@@ -104,6 +112,22 @@ export function BreakdownTable({
       setSortKey(key);
       setOrder(key === "name" ? "asc" : "desc");
     }
+  };
+
+  const hrefFor = (r: BreakdownRow): string | null => {
+    if (!linkKind) return null;
+    if (linkKind === "channel") {
+      return conversationsHrefFromQuery(baseQuery, { channel: r.name });
+    }
+    if (linkKind === "agent") {
+      return conversationsHrefFromQuery(baseQuery, {
+        agent: r.id || "unassigned",
+      });
+    }
+    // group
+    return conversationsHrefFromQuery(baseQuery, {
+      group: r.name === "No group" ? null : r.name,
+    });
   };
 
   return (
@@ -152,14 +176,26 @@ export function BreakdownTable({
                 </td>
               </tr>
             )}
-            {sorted.map((r) => (
-              <tr
-                key={r.id + r.name}
-                className="border-t border-slate-100 hover:bg-slate-50"
-              >
-                <td className="px-3 py-2 font-medium text-slate-800">
-                  {r.name}
-                </td>
+            {sorted.map((r) => {
+              const href = hrefFor(r);
+              return (
+                <tr
+                  key={r.id + r.name}
+                  className="border-t border-slate-100 hover:bg-slate-50"
+                >
+                  <td className="px-3 py-2 font-medium text-slate-800">
+                    {href ? (
+                      <Link
+                        href={href}
+                        className="text-[var(--brand-ink)] hover:text-[var(--brand)] hover:underline"
+                        title="Open matching conversations"
+                      >
+                        {r.name}
+                      </Link>
+                    ) : (
+                      r.name
+                    )}
+                  </td>
                 <td className="px-3 py-2 text-slate-600">
                   {r.conversations.toLocaleString()}
                 </td>
@@ -193,7 +229,8 @@ export function BreakdownTable({
                   {fmtDur(r.avgResolutionSeconds)}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

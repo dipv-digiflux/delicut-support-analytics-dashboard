@@ -55,4 +55,16 @@ DASHBOARD_ADMIN_PASSWORD=admin
 
 When `DASHBOARD_ADMIN_PASSWORD` is set, visiting the app redirects to `/login`. Default local login: **admin / admin**. Sign out from the header.
 
+## Private app (not for public listing)
+
+This dashboard is internal analytics. Crawlers are blocked via:
+
+- `robots: noindex, nofollow` in page metadata
+- `X-Robots-Tag` response header on all routes
+- `/robots.txt` → `Disallow: /`
+- Empty `/sitemap.xml`
+- Admin login gate (session cookie)
+
+Do not submit the URL to Google Search Console or public directories.
+
 See also [LOGGING.md](./LOGGING.md) and comments in [`.env.example`](../.env.example).
