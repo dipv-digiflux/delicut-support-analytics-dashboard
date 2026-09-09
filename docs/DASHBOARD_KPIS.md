@@ -8,7 +8,7 @@ All numbers come from **synced Freshchat Extract reports** stored in local Mongo
 > 🟢 = implemented in this app against currently synced conversation data.
 > 📋 = documented / planned — needs new sync events, collections, or Instant Metrics before UI can ship.
 
-Related: [ENV.md](./ENV.md) · [SYNC.md](./SYNC.md) · [FRESHCHAT_ADMIN_CHECKLIST.md](./FRESHCHAT_ADMIN_CHECKLIST.md)
+Related: [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md) · [ENV.md](./ENV.md) · [SYNC.md](./SYNC.md) · [FRESHCHAT_ADMIN_CHECKLIST.md](./FRESHCHAT_ADMIN_CHECKLIST.md)
 
 ---
 

@@ -1,5 +1,7 @@
 # Sync design (summary)
 
+How data is fetched, what is stored, and the warehouse layout: [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md).
+
 Standalone script: `npm run sync` → `scripts/sync.ts` → `lib/sync/run.ts`.
 
 Multi-day backfill: `npm run sync:campaign` → ledger + `sync_campaigns` checkpoint.

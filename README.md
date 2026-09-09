@@ -7,6 +7,7 @@ We do **not** invent CSAT, labels, or rewrite transcripts — optional keyword c
 
 | Doc | Purpose |
 |-----|---------|
+| [docs/DATA_ARCHITECTURE.md](./docs/DATA_ARCHITECTURE.md) | **How we get data, what we store, architecture** |
 | [docs/ENV.md](./docs/ENV.md) | **What each `.env` variable means** |
 | [docs/DASHBOARD_KPIS.md](./docs/DASHBOARD_KPIS.md) | **Dashboard data sources & KPI definitions** |
 | [docs/REVIEW_FIXES.md](./docs/REVIEW_FIXES.md) | Deep review findings & what we fixed |
