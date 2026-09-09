@@ -32,7 +32,7 @@ export function InfoTip({
         <span
           id={tipId}
           role="tooltip"
-          className="absolute bottom-full left-1/2 z-40 mb-1 w-56 -translate-x-1/2 rounded-lg bg-[#1f2937] px-2.5 py-2 text-left text-[11px] font-normal leading-snug text-white shadow-lg"
+          className="absolute bottom-full left-1/2 z-40 mb-1 w-56 -translate-x-1/2 rounded-lg bg-[#1f2937] px-2.5 py-2 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-white shadow-lg"
         >
           {text}
           <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[#1f2937]" />
