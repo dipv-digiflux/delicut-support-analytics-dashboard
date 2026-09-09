@@ -2,8 +2,9 @@ import { z } from "zod";
 import { config as loadDotenv } from "dotenv";
 import path from "path";
 
-loadDotenv({ path: path.resolve(process.cwd(), ".env.local") });
+// Load .env first, then .env.local overrides (so filled local secrets win).
 loadDotenv({ path: path.resolve(process.cwd(), ".env") });
+loadDotenv({ path: path.resolve(process.cwd(), ".env.local"), override: true });
 
 export const ExtractEventSchema = z.enum([
   "Chat-Transcript",
