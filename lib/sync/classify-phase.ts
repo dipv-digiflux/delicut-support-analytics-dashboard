@@ -8,6 +8,7 @@ import type { Logger } from "@/lib/log/logger";
  * Subject handling:
  * - Always mirror Freshchat resolution label into derived when present (as-is).
  * - Keyword/LLM classification only if CLASSIFY_ENABLED=true (optional helper).
+ * - Only touch docs that need it (null derived, version mismatch, or label present).
  */
 export async function classifyPending(
   counters: SyncRunCounters,
@@ -16,7 +17,22 @@ export async function classifyPending(
   const cfg = getConfig();
   const { conversations } = await collections();
 
-  const cursor = conversations.find({}).project({
+  const filter = {
+    $or: [
+      { derived: null },
+      { "derived.classifier_version": { $nin: ["freshchat-label", "none", cfg.CLASSIFIER_VERSION] } },
+      // Re-sync label onto derived when resolution exists but derived empty/outdated
+      {
+        "resolution.label": { $nin: [null, ""] },
+        $or: [
+          { derived: null },
+          { "derived.subject_source": { $ne: "resolution_label" } },
+        ],
+      },
+    ],
+  };
+
+  const cursor = conversations.find(filter).project({
     messages: 1,
     resolution: 1,
     is_stub: 1,
@@ -32,7 +48,6 @@ export async function classifyPending(
 
     let result;
     if (label) {
-      // Freshchat label as-is (category + optional subcategory)
       const subject = sub ? `${label} / ${sub}` : label;
       result = {
         subject,

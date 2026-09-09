@@ -48,6 +48,7 @@ export async function mergeTranscriptRows(
       channel_id: string | null;
       channel_name: string | null;
       conversation_url: string | null;
+      customer_id: string | null;
       user_ids: Set<string>;
       agent_ids: Set<string>;
       agent_name: string | null;
@@ -92,6 +93,7 @@ export async function mergeTranscriptRows(
         channel_id: getField(row, "channel_id"),
         channel_name: getField(row, "channel_name"),
         conversation_url: getField(row, "conversation_url"),
+        customer_id: getField(row, "customer_id"),
         user_ids: new Set(),
         agent_ids: new Set(),
         agent_name: null,
@@ -110,7 +112,10 @@ export async function mergeTranscriptRows(
       m.conversation_url || getField(row, "conversation_url");
 
     const customerId = getField(row, "customer_id");
-    if (customerId) m.user_ids.add(customerId);
+    if (customerId) {
+      m.customer_id = m.customer_id || customerId;
+      m.user_ids.add(customerId);
+    }
 
     if (actorId) {
       if (actorType === "user") {
@@ -153,6 +158,7 @@ export async function mergeTranscriptRows(
       derived: 1,
       assigned_agent_id: 1,
       assigned_agent_name: 1,
+      primary_user_id: 1,
     })
     .toArray();
   const existingMap = new Map(existing.map((e) => [e._id, e]));
@@ -187,10 +193,18 @@ export async function mergeTranscriptRows(
     const agentIds = [
       ...new Set([...(prev?.agent_ids || []), ...m.agent_ids]),
     ].sort();
-    const assignedAgentId =
-      prev?.assigned_agent_id || agentIds[0] || null;
+    // Prefer Freshchat customer_id; never invent assignee from first sorted agent id
+    const primaryUserId =
+      m.customer_id ||
+      (prev as { primary_user_id?: string | null } | undefined)
+        ?.primary_user_id ||
+      userIds[0] ||
+      null;
+    const assignedAgentId = prev?.assigned_agent_id || null;
     const assignedAgentName =
-      prev?.assigned_agent_name || m.agent_name || null;
+      prev?.assigned_agent_name ||
+      (assignedAgentId ? m.agent_name : null) ||
+      null;
 
     const hash = transcriptHash({
       conversation_id: conversationId,
@@ -231,7 +245,7 @@ export async function mergeTranscriptRows(
             last_message_at: m.last_message_at,
             user_ids: userIds,
             agent_ids: agentIds,
-            primary_user_id: userIds[0] || null,
+            primary_user_id: primaryUserId,
             messages,
             message_count: messages.length,
             messages_truncated: truncated,

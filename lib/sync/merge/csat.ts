@@ -34,9 +34,19 @@ export async function mergeCsatRows(
     const conversationId = getField(row, "conversation_id");
     if (!conversationId) continue;
 
-    const { rating, rating_raw } = normalizeCsatRating(
-      getField(row, "value", "csat_score", "rating"),
-    );
+    let rating: number | null = null;
+    let rating_raw: string | null = null;
+    try {
+      const normalized = normalizeCsatRating(
+        getField(row, "value", "csat_score", "rating"),
+      );
+      rating = normalized.rating;
+      rating_raw = normalized.rating_raw;
+    } catch {
+      // Skip unmapped row — don't fail the whole window (as-is: keep raw if we can)
+      rating_raw = getField(row, "value", "csat_score", "rating");
+      rating = null;
+    }
     const submitted_at = parseUtcDate(
       getField(row, "created_at", "csat_rated_at"),
     );
@@ -107,12 +117,6 @@ export async function mergeCsatRows(
               survey_id: csat.survey_id,
             },
             updated_at: now,
-            ...(csat.agent_id
-              ? {
-                  assigned_agent_id: csat.agent_id,
-                  assigned_agent_name: csat.agent_name,
-                }
-              : {}),
             "sources.csat": {
               hash,
               window_id: windowId,

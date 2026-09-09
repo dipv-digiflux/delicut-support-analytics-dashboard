@@ -1,7 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSyncStatus } from "@/lib/aggregations";
+import { assertApiAccess } from "@/lib/api-auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = assertApiAccess(req);
+  if (denied) return denied;
+
   try {
     const data = await getSyncStatus();
     return NextResponse.json({

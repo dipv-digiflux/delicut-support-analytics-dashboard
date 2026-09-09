@@ -9,6 +9,7 @@ We do **not** invent CSAT, labels, or rewrite transcripts — optional keyword c
 |-----|---------|
 | [docs/ENV.md](./docs/ENV.md) | **What each `.env` variable means** |
 | [docs/DASHBOARD_KPIS.md](./docs/DASHBOARD_KPIS.md) | **Dashboard data sources & KPI definitions** |
+| [docs/REVIEW_FIXES.md](./docs/REVIEW_FIXES.md) | Deep review findings & what we fixed |
 | [docs/FRESHCHAT_ADMIN_CHECKLIST.md](./docs/FRESHCHAT_ADMIN_CHECKLIST.md) | Freshchat admin setup |
 | [docs/BUILD_PLAN.md](./docs/BUILD_PLAN.md) | Architecture / phases |
 | [docs/SYNC.md](./docs/SYNC.md) | Sync / ledger notes |

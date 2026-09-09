@@ -93,14 +93,48 @@ export async function getKpis(filters: ConversationFilters) {
             $dateToString: { format: "%Y-%m-%d", date: "$created_at" },
           },
           count: { $sum: 1 },
-          resolved: {
-            $sum: { $cond: [{ $eq: ["$resolved", true] }, 1, 0] },
-          },
         },
       },
       { $sort: { _id: 1 } },
     ])
     .toArray();
+
+  // Resolved volume by resolve day (not create day) — accurate close-out trend
+  const dailyResolved = await conversations
+    .aggregate([
+      {
+        $match: {
+          ...match,
+          resolved: true,
+          resolved_at: { $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$resolved_at" },
+          },
+          resolved: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ])
+    .toArray();
+
+  const resolvedByDay = new Map(
+    dailyResolved.map((d) => [d._id as string, d.resolved as number]),
+  );
+  const createdByDay = new Map(
+    dailyVolume.map((d) => [d._id as string, d.count as number]),
+  );
+  const allDays = [
+    ...new Set([...createdByDay.keys(), ...resolvedByDay.keys()]),
+  ].sort();
+  const dailyVolumeMerged = allDays.map((date) => ({
+    date,
+    count: createdByDay.get(date) || 0,
+    resolved: resolvedByDay.get(date) || 0,
+  }));
 
   const dailyCsat = await conversations
     .aggregate([
@@ -231,11 +265,7 @@ export async function getKpis(filters: ConversationFilters) {
       channelCount: channelDeep.length,
     },
     charts: {
-      dailyVolume: dailyVolume.map((d) => ({
-        date: d._id,
-        count: d.count,
-        resolved: d.resolved,
-      })),
+      dailyVolume: dailyVolumeMerged,
       dailyCsat: dailyCsat.map((d) => ({
         date: d._id,
         average: Number(d.average?.toFixed?.(2) ?? d.average),
@@ -508,11 +538,14 @@ export async function getConversation(id: string) {
 export async function exportConversationsCsv(filters: ConversationFilters) {
   const { conversations, users } = await collections();
   const match = buildConversationMatch({ ...filters, page: 1, limit: 25 });
+  const EXPORT_CAP = 10000;
+  const totalMatched = await conversations.countDocuments(match);
   const items = await conversations
     .find(match)
     .sort(sortSpec(filters))
-    .limit(10000)
+    .limit(EXPORT_CAP)
     .toArray();
+  const truncated = totalMatched > items.length;
 
   const userIds = [
     ...new Set(items.map((i) => i.primary_user_id).filter(Boolean)),
@@ -593,7 +626,13 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
     );
   }
 
-  return lines.join("\n");
+  return {
+    csv: lines.join("\n"),
+    exported: items.length,
+    totalMatched,
+    truncated,
+    cap: EXPORT_CAP,
+  };
 }
 
 export async function getSyncStatus() {

@@ -95,9 +95,8 @@ export async function mergeLabelRows(
               labeled_at: resolution.labeled_at,
               labeled_by_agent_id: resolution.labeled_by_agent_id,
             },
-            resolved: true,
-            resolved_at: resolution.labeled_at,
-            status: "resolved",
+            // Do NOT invent resolved/status from label alone —
+            // Conversation-Resolved report owns that (as-is Freshchat data).
             updated_at: now,
             ...(resolution.labeled_by_agent_id
               ? {
@@ -119,6 +118,9 @@ export async function mergeLabelRows(
             assigned_group_id: null,
             created_at: null,
             last_message_at: null,
+            resolved_at: null,
+            resolved: false,
+            status: null,
             user_ids: [],
             agent_ids: resolution.labeled_by_agent_id
               ? [resolution.labeled_by_agent_id]

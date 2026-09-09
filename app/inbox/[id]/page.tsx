@@ -65,6 +65,8 @@ export default async function InboxConversationPage({
         csat: c.csat,
         agentName: c.agent.name,
       }))}
+      page={filters.page}
+      totalPages={list.totalPages}
       conversation={{
         id: conversation.id,
         createdAt: conversation.createdAt

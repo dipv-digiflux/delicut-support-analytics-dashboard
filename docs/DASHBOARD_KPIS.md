@@ -36,7 +36,7 @@ Related: [ENV.md](./ENV.md) · [SYNC.md](./SYNC.md) · [FRESHCHAT_ADMIN_CHECKLIS
 
 | Filter | Meaning |
 |--------|---------|
-| **From / To** | Filter on conversation `created_at` (UTC day bounds) |
+| **From / To** | Filter on conversation `created_at` using **UTC calendar days** of the picked dates (`REPORTING_TIMEZONE` is a display label only) |
 | **Subject / label** | Freshchat resolution label (`derived.subject`), or `unlabeled` |
 | **Agent** | `assigned_agent_id` (or `unassigned`) |
 | **Channel** | Exact `channel_name` |
@@ -79,7 +79,7 @@ Changing filters recalculates **every** KPI, chart, and breakdown for the same m
 
 | Chart | Data | How to read it |
 |-------|------|----------------|
-| **Daily conversation volume** | Created vs resolved per day | Demand vs close-out |
+| **Daily conversation volume** | Created count by `created_at` day; resolved count by `resolved_at` day | Demand vs close-out (not “created that day and later resolved”) |
 | **Daily CSAT trend** | Avg CSAT by rating date (fallback created date) | Quality over time; point has rated n |
 | **CSAT distribution** | Counts of scores 1–5 | Shape of satisfaction |
 | **By channel** | Conversation count per `channel_name` | Where volume lands |

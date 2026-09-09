@@ -141,7 +141,7 @@ export function DailyVolumeChart({
   data: { date: string; count: number; resolved: number }[];
 }) {
   return (
-    <ChartCard title="Daily conversation volume">
+    <ChartCard title="Daily volume (created vs resolved-by-day)">
       {data.length === 0 ? (
         <Empty />
       ) : (

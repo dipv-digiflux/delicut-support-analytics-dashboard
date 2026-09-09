@@ -1,22 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseFilters, defaultDateRange } from "@/lib/filters";
 import { exportConversationsCsv } from "@/lib/aggregations";
+import { assertApiAccess } from "@/lib/api-auth";
 
 export async function GET(req: NextRequest) {
+  const denied = assertApiAccess(req);
+  if (denied) return denied;
+
   try {
     const defaults = defaultDateRange(30);
     const sp = new URL(req.url).searchParams;
     if (!sp.get("from")) sp.set("from", defaults.from);
     if (!sp.get("to")) sp.set("to", defaults.to);
     const filters = parseFilters(sp);
-    const csv = await exportConversationsCsv(filters);
+    const result = await exportConversationsCsv(filters);
     const filename = `freshchat-conversations-${filters.from}_${filters.to}.csv`;
 
-    return new NextResponse(csv, {
+    return new NextResponse(result.csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
+        "X-Export-Rows": String(result.exported),
+        "X-Export-Total-Matched": String(result.totalMatched),
+        "X-Export-Truncated": result.truncated ? "true" : "false",
+        "X-Export-Cap": String(result.cap),
       },
     });
   } catch (err) {

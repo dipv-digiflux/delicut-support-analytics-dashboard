@@ -66,12 +66,16 @@ export function InboxShell({
   totalItems,
   conversations,
   conversation,
+  page = 1,
+  totalPages = 1,
 }: {
   activeId: string;
   listQuery: string;
   totalItems: number;
   conversations: ListItem[];
   conversation: Conversation;
+  page?: number;
+  totalPages?: number;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -176,6 +180,31 @@ export function InboxShell({
             </div>
           )}
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
+            <span>
+              Page {page}/{totalPages}
+            </span>
+            <div className="flex gap-2">
+              {page > 1 && (
+                <Link
+                  href={`/inbox/${activeId}?${withPage(listQuery, page - 1)}`}
+                  className="text-[#275ded] hover:underline"
+                >
+                  Prev
+                </Link>
+              )}
+              {page < totalPages && (
+                <Link
+                  href={`/inbox/${activeId}?${withPage(listQuery, page + 1)}`}
+                  className="text-[#275ded] hover:underline"
+                >
+                  Next
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Chat thread */}
@@ -380,6 +409,12 @@ export function InboxShell({
       </aside>
     </>
   );
+}
+
+function withPage(listQuery: string, page: number) {
+  const qs = new URLSearchParams(listQuery);
+  qs.set("page", String(page));
+  return qs.toString();
 }
 
 function Avatar({ name, large }: { name: string; large?: boolean }) {

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseFilters, defaultDateRange } from "@/lib/filters";
 import { listConversations, getSyncStatus } from "@/lib/aggregations";
+import { assertApiAccess } from "@/lib/api-auth";
 
 export async function GET(req: NextRequest) {
+  const denied = assertApiAccess(req);
+  if (denied) return denied;
+
   try {
     const defaults = defaultDateRange(30);
     const sp = new URL(req.url).searchParams;

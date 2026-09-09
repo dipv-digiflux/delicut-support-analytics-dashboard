@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConversation, getSyncStatus } from "@/lib/aggregations";
+import { assertApiAccess } from "@/lib/api-auth";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const denied = assertApiAccess(req);
+  if (denied) return denied;
+
   try {
     const { id } = await ctx.params;
     const conversation = await getConversation(id);
