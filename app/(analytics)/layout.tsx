@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { SidebarNav } from "@/components/SidebarNav";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { TimezoneSwitcher } from "@/components/TimezoneSwitcher";
+import { LogoutButton } from "@/components/LogoutButton";
+import { authEnabled } from "@/lib/auth/credentials";
 import { getConfig } from "@/lib/config";
 import { resolveTimeZone } from "@/lib/timezone";
 
@@ -14,6 +16,7 @@ export default function AnalyticsLayout({
   const cfg = getConfig();
   const defaultTz = resolveTimeZone(cfg.REPORTING_TIMEZONE);
   const year = new Date().getFullYear();
+  const showLogout = authEnabled();
 
   return (
     <div className="flex min-h-screen bg-[var(--background)]">
@@ -49,6 +52,7 @@ export default function AnalyticsLayout({
               <TimezoneSwitcher defaultTimeZone={defaultTz} />
             </Suspense>
             <SyncStatusBadge />
+            {showLogout && <LogoutButton />}
           </div>
         </header>
         <main className="flex-1 px-6 py-5">{children}</main>

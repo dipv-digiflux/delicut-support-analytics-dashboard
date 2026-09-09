@@ -9,6 +9,8 @@ export interface DirectoryOption {
   secondary?: string | null;
 }
 
+const PAGE_SIZE = 40;
+
 export function SearchableMultiSelect({
   label,
   endpoint,
@@ -27,30 +29,57 @@ export function SearchableMultiSelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [options, setOptions] = useState<DirectoryOption[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const boxRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const selectedKey = selected.join("|");
+  const requestId = useRef(0);
 
-  const load = useCallback(
-    async (query: string) => {
-      setLoading(true);
+  const mergeLabels = (items: DirectoryOption[]) => {
+    setLabels((prev) => {
+      const next = { ...prev };
+      for (const i of items) next[i.id] = i.name;
+      return next;
+    });
+  };
+
+  const loadPage = useCallback(
+    async (query: string, pageNum: number, append: boolean) => {
+      const id = ++requestId.current;
+      if (append) setLoadingMore(true);
+      else setLoading(true);
       try {
         const res = await fetch(
-          `${endpoint}?q=${encodeURIComponent(query)}&limit=40`,
+          `${endpoint}?q=${encodeURIComponent(query)}&limit=${PAGE_SIZE}&page=${pageNum}`,
         );
         const json = await res.json();
+        if (id !== requestId.current) return;
         const items = (json.data?.items || []) as DirectoryOption[];
-        setOptions(items);
-        setLabels((prev) => {
-          const next = { ...prev };
-          for (const i of items) next[i.id] = i.name;
-          return next;
+        const more = Boolean(json.data?.hasMore);
+        const tot = Number(json.data?.total || items.length);
+        setHasMore(more);
+        setTotal(tot);
+        setPage(pageNum);
+        setOptions((prev) => {
+          if (!append) return items;
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...items.filter((i) => !seen.has(i.id))];
         });
+        mergeLabels(items);
       } catch {
-        setOptions([]);
+        if (id !== requestId.current) return;
+        if (!append) setOptions([]);
+        setHasMore(false);
       } finally {
-        setLoading(false);
+        if (id === requestId.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [endpoint],
@@ -59,18 +88,18 @@ export function SearchableMultiSelect({
   // Resolve chip labels for already-selected ids
   useEffect(() => {
     if (!selected.length) return;
+    const missing = selected.filter((id) => !labels[id]);
+    if (!missing.length) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${endpoint}?limit=100`);
+        const res = await fetch(
+          `${endpoint}?ids=${encodeURIComponent(missing.join(","))}`,
+        );
         const json = await res.json();
         const items = (json.data?.items || []) as DirectoryOption[];
         if (cancelled) return;
-        setLabels((prev) => {
-          const next = { ...prev };
-          for (const i of items) next[i.id] = i.name;
-          return next;
-        });
+        mergeLabels(items);
       } catch {
         /* ignore */
       }
@@ -78,13 +107,20 @@ export function SearchableMultiSelect({
     return () => {
       cancelled = true;
     };
-  }, [endpoint, selectedKey, selected.length]);
+    // intentionally omit labels — only re-fetch when selection changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint, selectedKey]);
 
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => load(q), 200);
+    const t = setTimeout(() => {
+      setOptions([]);
+      setPage(1);
+      setHasMore(false);
+      void loadPage(q, 1, false);
+    }, 200);
     return () => clearTimeout(t);
-  }, [q, open, load]);
+  }, [q, open, loadPage]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -93,6 +129,13 @@ export function SearchableMultiSelect({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
+
+  const onScroll = () => {
+    const el = listRef.current;
+    if (!el || loading || loadingMore || !hasMore) return;
+    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+    if (nearBottom) void loadPage(q, page + 1, true);
+  };
 
   const toggle = (id: string, name: string) => {
     setLabels((p) => ({ ...p, [id]: name }));
@@ -140,8 +183,12 @@ export function SearchableMultiSelect({
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <div className="max-h-56 overflow-y-auto text-sm">
-            {loading && (
+          <div
+            ref={listRef}
+            onScroll={onScroll}
+            className="max-h-56 overflow-y-auto text-sm"
+          >
+            {loading && options.length === 0 && (
               <div className="px-2 py-2 text-[var(--muted)]">Loading…</div>
             )}
             {!loading && options.length === 0 && (
@@ -165,7 +212,28 @@ export function SearchableMultiSelect({
                 </button>
               );
             })}
+            {loadingMore && (
+              <div className="px-2 py-2 text-center text-[11px] text-[var(--muted)]">
+                Loading more…
+              </div>
+            )}
+            {!loadingMore && hasMore && (
+              <button
+                type="button"
+                onClick={() => void loadPage(q, page + 1, true)}
+                className="w-full px-2 py-2 text-center text-[11px] font-medium text-[var(--brand)] hover:underline"
+              >
+                Load more
+              </button>
+            )}
           </div>
+          {total > 0 && (
+            <div className="mt-1 border-t border-[var(--border)] px-1 pt-1 text-[10px] text-[var(--muted)]">
+              Showing {options.length}
+              {total > options.length ? ` of ${total}` : ""}
+              {hasMore ? " · scroll for more" : ""}
+            </div>
+          )}
           <div className="sr-only">{paramKey}</div>
         </div>
       )}

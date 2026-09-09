@@ -6,7 +6,7 @@ import { filtersFromSearchParams } from "@/lib/filter-defaults";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const denied = requireApiAuth(req);
+  const denied = await requireApiAuth(req);
   if (denied) return denied;
 
   const filters = filtersFromSearchParams(req.nextUrl.searchParams);

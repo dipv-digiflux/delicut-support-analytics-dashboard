@@ -61,34 +61,38 @@ export default async function ConversationsPage({
         </div>
       )}
 
-      <ConversationTable
-        items={(result?.items || []).map((r) => ({
-          id: r.id,
-          createdAt: r.createdAt,
-          updatedAt: r.updatedAt ?? null,
-          lastMessageAt: r.lastMessageAt ?? null,
-          resolvedAt: r.resolvedAt ?? null,
-          channel: r.channel,
-          group: r.group,
-          status: r.status ?? null,
-          user: r.user,
-          subject: r.subject,
-          resolutionSubLabel: r.resolutionSubLabel ?? null,
-          agent: r.agent,
-          resolved: r.resolved,
-          reopened: r.reopened,
-          csat: r.csat,
-          csatComment: r.csatComment ?? null,
-          messageCount: r.messageCount,
-          attachmentCount: r.attachmentCount ?? 0,
-          firstResponseSeconds: r.firstResponseSeconds,
-          resolutionSeconds: r.resolutionSeconds ?? null,
-          preview: r.preview,
-          conversationUrl: r.conversationUrl,
-          isStub: r.isStub,
-        }))}
-        timeZone={filters.timeZone}
-      />
+      <Suspense fallback={<div className="h-40 animate-pulse rounded bg-slate-100" />}>
+        <ConversationTable
+          items={(result?.items || []).map((r) => ({
+            id: r.id,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt ?? null,
+            lastMessageAt: r.lastMessageAt ?? null,
+            resolvedAt: r.resolvedAt ?? null,
+            channel: r.channel,
+            group: r.group,
+            status: r.status ?? null,
+            user: r.user,
+            subject: r.subject,
+            resolutionSubLabel: r.resolutionSubLabel ?? null,
+            agent: r.agent,
+            resolved: r.resolved,
+            reopened: r.reopened,
+            csat: r.csat,
+            csatComment: r.csatComment ?? null,
+            messageCount: r.messageCount,
+            attachmentCount: r.attachmentCount ?? 0,
+            firstResponseSeconds: r.firstResponseSeconds,
+            resolutionSeconds: r.resolutionSeconds ?? null,
+            preview: r.preview,
+            conversationUrl: r.conversationUrl,
+            isStub: r.isStub,
+          }))}
+          timeZone={filters.timeZone}
+          currentSort={filters.sort}
+          currentOrder={filters.order}
+        />
+      </Suspense>
 
       {result && (
         <Suspense fallback={null}>

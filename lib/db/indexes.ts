@@ -20,19 +20,25 @@ export async function ensureIndexes(db: Db): Promise<void> {
     },
     { key: { updated_at: -1 } },
     { key: { resolved: 1, created_at: -1 } },
+    { key: { assigned_agent_name: 1 }, sparse: true },
+    { key: { channel_name: 1 }, sparse: true },
+    { key: { group_name: 1 }, sparse: true },
   ]);
 
   const users = db.collection("users");
   await users.createIndexes([
     { key: { role: 1, "enrichment.status": 1 } },
     { key: { role: 1, first_name: 1, last_name: 1 } },
+    { key: { role: 1, "stats.last_seen_at": -1 } },
     { key: { email: 1 }, sparse: true },
+    { key: { phone: 1 }, sparse: true },
+    { key: { reference_id: 1 }, sparse: true },
     { key: { "stats.last_seen_at": -1 } },
   ]);
 
   const syncWindows = db.collection("sync_windows");
   await syncWindows.createIndexes([
-    { key: { event: 1, window_start: 1 } },
+    { key: { event: 1, time_start: 1 } },
     { key: { status: 1, event: 1 } },
     { key: { last_run_id: 1 } },
     { key: { submitted_at: -1 } },

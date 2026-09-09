@@ -1,33 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
+import {
+  SESSION_COOKIE,
+  isAuthEnabled,
+  sessionSecretFromEnv,
+  verifySessionToken,
+} from "@/lib/auth/session";
 
 /**
- * Optional API gate. Set DASHBOARD_API_SECRET in .env / .env.local.
- * Clients must send: Authorization: Bearer <secret>
- * If secret is empty, routes stay open (local-dev default).
+ * API gate:
+ * 1. Valid admin session cookie (when DASHBOARD_ADMIN_PASSWORD is set)
+ * 2. Or Authorization: Bearer <DASHBOARD_API_SECRET> / ?api_key=
+ * 3. If neither password nor API secret is configured → open (local only)
  */
-export function assertApiAccess(req: NextRequest): NextResponse | null {
-  const secret = getConfig().DASHBOARD_API_SECRET || "";
-  if (!secret) return null;
+export async function assertApiAccess(
+  req: NextRequest,
+): Promise<NextResponse | null> {
+  const cfg = getConfig();
+  const authOn = isAuthEnabled(cfg);
+  const apiSecret = (cfg.DASHBOARD_API_SECRET || "").trim();
 
-  const header = req.headers.get("authorization") || "";
-  const token = header.startsWith("Bearer ")
-    ? header.slice(7).trim()
-    : req.nextUrl.searchParams.get("api_key") || "";
+  if (!authOn && !apiSecret) return null;
 
-  if (token !== secret) {
-    return NextResponse.json(
-      {
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Missing or invalid API credentials",
-        },
-      },
-      { status: 401 },
+  if (authOn) {
+    const cookie = req.cookies.get(SESSION_COOKIE)?.value;
+    const session = await verifySessionToken(
+      cookie,
+      sessionSecretFromEnv(cfg),
     );
+    if (session) return null;
   }
-  return null;
+
+  if (apiSecret) {
+    const header = req.headers.get("authorization") || "";
+    const token = header.startsWith("Bearer ")
+      ? header.slice(7).trim()
+      : req.nextUrl.searchParams.get("api_key") || "";
+    if (token === apiSecret) return null;
+  }
+
+  return NextResponse.json(
+    {
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Missing or invalid credentials",
+      },
+    },
+    { status: 401 },
+  );
 }
 
-/** Alias used by newer routes */
+/** Alias used by routes — must be awaited */
 export const requireApiAuth = assertApiAccess;

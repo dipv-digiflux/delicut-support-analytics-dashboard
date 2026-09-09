@@ -7,7 +7,7 @@ import { getConfig } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const denied = requireApiAuth(req);
+  const denied = await requireApiAuth(req);
   if (denied) return denied;
 
   try {

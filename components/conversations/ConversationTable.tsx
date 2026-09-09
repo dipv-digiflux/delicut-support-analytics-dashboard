@@ -8,6 +8,7 @@ import {
   useColumnVisibility,
   type ColumnDef,
 } from "@/components/ui/ColumnPicker";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { parseChannel } from "@/lib/display/channel";
 import { formatInTimeZone } from "@/lib/timezone";
 
@@ -75,6 +76,23 @@ const ALL_COLUMNS = [
 
 type ColId = (typeof ALL_COLUMNS)[number]["id"];
 
+/** Column id → URL `sort` key (omit = not sortable). */
+const COL_SORT: Partial<Record<ColId, string>> = {
+  createdAt: "created_at",
+  lastMessageAt: "last_message_at",
+  resolvedAt: "resolved_at",
+  channel: "channel",
+  group: "group",
+  label: "subject",
+  agent: "agent",
+  resolved: "resolved",
+  reopened: "reopened",
+  csat: "csat",
+  messages: "message_count",
+  frt: "frt",
+  resolutionTime: "resolution_time",
+};
+
 function fmtDur(seconds: number | null | undefined) {
   if (seconds == null) return "—";
   if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -99,9 +117,13 @@ function fmtWhen(
 export function ConversationTable({
   items,
   timeZone,
+  currentSort = "created_at",
+  currentOrder = "desc",
 }: {
   items: ConversationRow[];
   timeZone: string;
+  currentSort?: string;
+  currentOrder?: "asc" | "desc";
 }) {
   const { visible, persist, cols, defaults } = useColumnVisibility<ColId>(
     STORAGE_KEY,
@@ -124,7 +146,14 @@ export function ConversationTable({
           <thead>
             <tr>
               {cols.map((c) => (
-                <th key={c.id}>{c.label}</th>
+                <th key={c.id}>
+                  <SortHeader
+                    label={c.label}
+                    sortKey={COL_SORT[c.id]}
+                    currentSort={currentSort}
+                    currentOrder={currentOrder}
+                  />
+                </th>
               ))}
             </tr>
           </thead>

@@ -9,28 +9,111 @@ export interface DirectoryItem {
   phone: string | null;
   role: "user" | "agent";
   lastSeenAt: Date | null;
+  secondary?: string | null;
+}
+
+export interface DirectoryPage {
+  items: DirectoryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }
 
 function displayName(u: {
   first_name?: string | null;
   last_name?: string | null;
   email?: string | null;
+  phone?: string | null;
   _id: string;
 }): string {
   const n = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
-  return n || u.email || u._id;
+  return n || u.email || u.phone || u._id;
+}
+
+function toItem(u: {
+  _id: unknown;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  role?: string;
+  stats?: { last_seen_at?: Date | null };
+}): DirectoryItem {
+  const id = String(u._id);
+  return {
+    id,
+    name: displayName({
+      _id: id,
+      first_name: u.first_name,
+      last_name: u.last_name,
+      email: u.email,
+      phone: u.phone,
+    }),
+    email: u.email ?? null,
+    phone: u.phone ?? null,
+    role: (u.role as "user" | "agent") || "user",
+    lastSeenAt: u.stats?.last_seen_at ?? null,
+    secondary: u.email || u.phone || id,
+  };
 }
 
 export async function searchDirectory(opts: {
   role: "user" | "agent";
   q?: string;
   limit?: number;
-}): Promise<DirectoryItem[]> {
+  page?: number;
+  /** Resolve specific ids (for selected chips) — ignores page/q when set */
+  ids?: string[];
+}): Promise<DirectoryPage> {
   const { users } = await collections();
   const limit = Math.min(
-    opts.limit ?? getConfig().DIRECTORY_SEARCH_LIMIT,
+    Math.max(1, opts.limit ?? getConfig().DIRECTORY_SEARCH_LIMIT),
     100,
   );
+  const page = Math.max(1, opts.page ?? 1);
+  const skip = (page - 1) * limit;
+
+  if (opts.ids?.length) {
+    const unique = [...new Set(opts.ids.filter(Boolean))].slice(0, 100);
+    const rows = await users
+      .find({ role: opts.role, _id: { $in: unique } })
+      .project({
+        first_name: 1,
+        last_name: 1,
+        email: 1,
+        phone: 1,
+        role: 1,
+        stats: 1,
+      })
+      .toArray();
+    const byId = new Map(
+      rows.map((u) => [String(u._id), toItem(u as Parameters<typeof toItem>[0])]),
+    );
+    const items = unique
+      .map((id) => byId.get(id))
+      .filter((x): x is DirectoryItem => Boolean(x));
+    // Synthetic unassigned for agents
+    if (opts.role === "agent" && unique.includes("unassigned")) {
+      items.unshift({
+        id: "unassigned",
+        name: "Unassigned",
+        email: null,
+        phone: null,
+        role: "agent",
+        lastSeenAt: null,
+        secondary: "No agent assigned",
+      });
+    }
+    return {
+      items,
+      total: items.length,
+      page: 1,
+      limit: items.length,
+      hasMore: false,
+    };
+  }
+
   const filter: Record<string, unknown> = { role: opts.role };
 
   if (opts.q?.trim()) {
@@ -49,9 +132,11 @@ export async function searchDirectory(opts: {
     ];
   }
 
+  const total = await users.countDocuments(filter);
   const rows = await users
     .find(filter)
     .sort({ "stats.last_seen_at": -1 })
+    .skip(skip)
     .limit(limit)
     .project({
       first_name: 1,
@@ -63,21 +148,9 @@ export async function searchDirectory(opts: {
     })
     .toArray();
 
-  const items = rows.map((u) => ({
-    id: String(u._id),
-    name: displayName({
-      _id: String(u._id),
-      first_name: u.first_name,
-      last_name: u.last_name,
-      email: u.email,
-    }),
-    email: u.email ?? null,
-    phone: u.phone ?? null,
-    role: u.role as "user" | "agent",
-    lastSeenAt: u.stats?.last_seen_at ?? null,
-  }));
+  const items = rows.map((u) => toItem(u as Parameters<typeof toItem>[0]));
 
-  if (opts.role === "agent" && !opts.q) {
+  if (opts.role === "agent" && !opts.q && page === 1) {
     items.unshift({
       id: "unassigned",
       name: "Unassigned",
@@ -85,13 +158,20 @@ export async function searchDirectory(opts: {
       phone: null,
       role: "agent",
       lastSeenAt: null,
+      secondary: "No agent assigned",
     });
   }
 
-  return items;
+  return {
+    items,
+    total,
+    page,
+    limit,
+    hasMore: skip + rows.length < total,
+  };
 }
 
-export async function listChannels(q?: string, limit = 40) {
+export async function listChannels(q?: string, limit = 40, page = 1) {
   const { conversations } = await collections();
   const pipeline: object[] = [
     {
@@ -142,5 +222,17 @@ export async function listChannels(q?: string, limit = 40) {
     );
   }
 
-  return items.slice(0, Math.min(limit, 100));
+  const total = items.length;
+  const safeLimit = Math.min(Math.max(1, limit), 200);
+  const safePage = Math.max(1, page);
+  const skip = (safePage - 1) * safeLimit;
+  const pageItems = items.slice(skip, skip + safeLimit);
+
+  return {
+    items: pageItems,
+    total,
+    page: safePage,
+    limit: safeLimit,
+    hasMore: skip + pageItems.length < total,
+  };
 }

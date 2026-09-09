@@ -4,6 +4,7 @@ import type { EmbeddedAttachment } from "@/lib/db/types";
 import { parseChannel } from "@/lib/display/channel";
 import {
   buildConversationMatch,
+  customerMongoSort,
   type ConversationFilters,
 } from "@/lib/filters";
 
@@ -73,16 +74,23 @@ export async function listCustomers(
         ],
       })
       .project({ _id: 1 })
+      .limit(500)
       .toArray();
     const textIds = new Set(textHits.map((u) => u._id));
 
-    // Also match channel / handle in conversations
+    // Also match channel / handle / agent / label in conversations
     const channelHits = await conversations
       .aggregate<{ _id: string }>([
         {
           $match: {
             ...convMatch,
-            channel_name: re,
+            $or: [
+              { channel_name: re },
+              { assigned_agent_name: re },
+              { group_name: re },
+              { "resolution.label": re },
+              { "derived.subject": re },
+            ],
           },
         },
         {
@@ -121,12 +129,19 @@ export async function listCustomers(
     };
   }
 
-  // Preserve activity order via user stats among candidates
+  const mongoSort = customerMongoSort(opts);
+  const needsComputedSort =
+    opts.sort === "conversation_count" || opts.sort === "customer_messages";
+
+  // For computed sorts, load all matching users + counts then sort/slice in memory
+  const fetchLimit = needsComputedSort ? candidateIds.length : limit;
+  const fetchSkip = needsComputedSort ? 0 : skip;
+
   const rows = await users
     .find({ role: "user", _id: { $in: candidateIds } })
-    .sort({ "stats.last_seen_at": -1 })
-    .skip(skip)
-    .limit(limit)
+    .sort(mongoSort || { "stats.last_seen_at": -1 })
+    .skip(fetchSkip)
+    .limit(fetchLimit)
     .toArray();
 
   const ids = rows.map((u) => u._id);
@@ -179,37 +194,55 @@ export async function listCustomers(
 
   const countMap = new Map(counts.map((c) => [c._id as string, c]));
 
-  return {
-    items: rows.map((u) => {
-      const c = countMap.get(u._id);
-      const ch = parseChannel((c?.lastChannel as string) || null);
-      return {
+  let items = rows.map((u) => {
+    const c = countMap.get(u._id);
+    const ch = parseChannel((c?.lastChannel as string) || null);
+    return {
+      id: u._id,
+      name: displayName(u),
+      email: u.email,
+      phone: u.phone,
+      referenceId: u.reference_id,
+      enrichmentStatus: u.enrichment?.status ?? null,
+      firstSeenAt: u.stats?.first_seen_at ?? null,
+      lastSeenAt: u.stats?.last_seen_at ?? null,
+      conversationCount:
+        c?.conversationCount ?? u.stats?.conversation_count ?? 0,
+      messageCount: c?.messageSum ?? 0,
+      lastChannel: c?.lastChannel ?? null,
+      lastChannelKind: ch.label,
+      lastChannelIdentity: ch.identity,
+      lastAgent: c?.lastAgent ?? null,
+      lastAgentId: (c?.lastAgentId as string) || null,
+      raw: {
         id: u._id,
-        name: displayName(u),
         email: u.email,
         phone: u.phone,
-        referenceId: u.reference_id,
-        enrichmentStatus: u.enrichment?.status ?? null,
-        firstSeenAt: u.stats?.first_seen_at ?? null,
-        lastSeenAt: u.stats?.last_seen_at ?? null,
-        conversationCount:
-          c?.conversationCount ?? u.stats?.conversation_count ?? 0,
-        messageCount: c?.messageSum ?? 0,
-        lastChannel: c?.lastChannel ?? null,
-        lastChannelKind: ch.label,
-        lastChannelIdentity: ch.identity,
-        lastAgent: c?.lastAgent ?? null,
-        lastAgentId: (c?.lastAgentId as string) || null,
-        raw: {
-          id: u._id,
-          email: u.email,
-          phone: u.phone,
-          reference_id: u.reference_id,
-          properties: u.properties,
-          stats: u.stats,
-        },
-      };
-    }),
+        reference_id: u.reference_id,
+        properties: u.properties,
+        stats: u.stats,
+      },
+    };
+  });
+
+  if (needsComputedSort) {
+    const dir = opts.order === "asc" ? 1 : -1;
+    items.sort((a, b) => {
+      const av =
+        opts.sort === "customer_messages"
+          ? a.messageCount
+          : a.conversationCount;
+      const bv =
+        opts.sort === "customer_messages"
+          ? b.messageCount
+          : b.conversationCount;
+      return (av - bv) * dir;
+    });
+    items = items.slice(skip, skip + limit);
+  }
+
+  return {
+    items,
     totalItems,
     page: opts.page,
     limit,
@@ -463,7 +496,18 @@ export async function exportCustomersCsv(
     const textIds = new Set(textHits.map((u) => u._id));
     const channelHits = await conversations
       .aggregate<{ _id: string }>([
-        { $match: { ...convMatch, channel_name: re } },
+        {
+          $match: {
+            ...convMatch,
+            $or: [
+              { channel_name: re },
+              { assigned_agent_name: re },
+              { group_name: re },
+              { "resolution.label": re },
+              { "derived.subject": re },
+            ],
+          },
+        },
         {
           $project: {
             ids: {

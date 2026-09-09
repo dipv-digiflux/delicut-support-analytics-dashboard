@@ -4,7 +4,7 @@ import { assertApiAccess } from "@/lib/api-auth";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
 
 export async function GET(req: NextRequest) {
-  const denied = assertApiAccess(req);
+  const denied = await assertApiAccess(req);
   if (denied) return denied;
 
   try {

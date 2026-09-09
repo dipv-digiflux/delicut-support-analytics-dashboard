@@ -9,6 +9,7 @@ import {
   type ColumnDef,
 } from "@/components/ui/ColumnPicker";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { SEARCH_COVERS, SEARCH_PLACEHOLDER } from "@/lib/search";
 
 const FILTER_STORAGE = "delicut.filters.visible.v1";
 
@@ -245,12 +246,15 @@ export function FilterBar({ showSearch = true }: { showSearch?: boolean }) {
           </Field>
         )}
         {showSearch && show("search") && (
-          <Field label="Search">
+          <Field
+            label="Search"
+            tip={`Search will work for: ${SEARCH_COVERS}. Press Search (or Enter) to apply. Same query feeds KPIs, tables, and CSV export.`}
+          >
             <div className="flex items-center gap-2">
               <input
                 ref={qRef}
-                className="w-48 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-                placeholder="id, phone, name…"
+                className="w-56 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+                placeholder={SEARCH_PLACEHOLDER}
                 defaultValue={sp.get("q") || ""}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -287,14 +291,19 @@ export function FilterBar({ showSearch = true }: { showSearch?: boolean }) {
 
 function Field({
   label,
+  tip,
   children,
 }: {
   label: string;
+  tip?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="block">
-      <div className="mb-1 text-xs font-medium text-[var(--muted)]">{label}</div>
+      <div className="mb-1 flex items-center text-xs font-medium text-[var(--muted)]">
+        {label}
+        {tip && <InfoTip text={tip} />}
+      </div>
       {children}
     </div>
   );

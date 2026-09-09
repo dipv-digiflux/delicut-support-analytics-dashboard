@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FormattedMessage } from "@/components/chat/FormattedMessage";
+import { MessageBubble, type ChatMsg } from "@/components/chat/MessageBubble";
 import { ChannelBadge, ProfileAvatar } from "@/components/ui/Identity";
 import { MediaModal, type MediaItem } from "@/components/ui/MediaModal";
 import { RawJsonButton, RawJsonModal } from "@/components/ui/RawJson";
@@ -230,14 +230,7 @@ export function CustomerChatHistory({
             const prev = items[idx - 1];
             const showDivider =
               !prev || prev.conversationId !== m.conversationId;
-            const fromCustomer = m.actorType === "user";
-            const isSystem = m.actorType === "system" || m.actorType === "bot";
             const ch = parseChannel(m.channelName);
-            const bubbleColor = isSystem
-              ? "#f3f4f6"
-              : fromCustomer
-                ? theme.userBubble
-                : theme.agentBubble;
 
             return (
               <div key={`${m.conversationId}-${m.messageId}-${idx}`}>
@@ -253,148 +246,34 @@ export function CustomerChatHistory({
                     </Link>
                   </div>
                 )}
-
-                {isSystem ? (
-                  <div className="mb-2 flex justify-center">
-                    <div
-                      className="max-w-[85%] rounded-lg border border-[var(--border)] px-3 py-1.5 text-center text-xs text-[var(--muted)] shadow-sm"
-                      style={{ backgroundColor: bubbleColor }}
-                    >
-                      <FormattedMessage text={m.text} />
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className={`mb-2 flex items-end gap-2 ${
-                      fromCustomer ? "justify-start" : "justify-end"
-                    }`}
-                  >
-                    {fromCustomer && (
-                      <ProfileAvatar
-                        name={m.actorName || customer?.name}
-                        id={m.actorId || userId}
-                        size={28}
-                        onClick={() =>
-                          setActorInfo({
-                            id: m.actorId || userId,
-                            name: m.actorName || customer?.name || null,
-                            email: m.actorEmail || customer?.email || null,
-                            type: "customer",
-                            href: `/users/${m.actorId || userId}`,
-                          })
-                        }
-                      />
-                    )}
-                    <div
-                      className={`max-w-[72%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
-                        fromCustomer ? "rounded-tl-sm" : "rounded-tr-sm"
-                      }`}
-                      style={{
-                        backgroundColor: bubbleColor,
-                        borderLeft: fromCustomer
-                          ? `3px solid ${theme.accent}`
-                          : undefined,
-                        borderRight: !fromCustomer
-                          ? `3px solid ${theme.accent}`
-                          : undefined,
-                      }}
-                    >
-                      {!fromCustomer && (
-                        <button
-                          type="button"
-                          className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold"
-                          style={{ color: theme.accent }}
-                          onClick={() =>
-                            setActorInfo({
-                              id: m.actorId,
-                              name: m.actorName,
-                              email: m.actorEmail,
-                              type: m.actorType,
-                              href: m.actorId
-                                ? `/responders/${m.actorId}`
-                                : null,
-                            })
-                          }
-                        >
-                          <ProfileAvatar
-                            name={m.actorName}
-                            id={m.actorId}
-                            size={16}
-                          />
-                          {m.actorName || "Responder"}
-                        </button>
-                      )}
-                      <FormattedMessage
-                        text={
-                          m.text || (m.hasAttachment ? "" : "—")
-                        }
-                      />
-                      {(m.attachments || []).map((a, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          className="mt-1 block w-full text-left"
-                          onClick={() => setMedia(a)}
-                        >
-                          {a.url &&
-                          (a.kind === "image" ||
-                            a.mime_type?.startsWith("image/")) ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={a.url}
-                              alt={a.file_name || "image"}
-                              className="max-h-40 rounded-lg hover:opacity-90"
-                            />
-                          ) : (
-                            <div className="rounded bg-black/5 px-2 py-1 text-xs hover:bg-black/10">
-                              📎 {a.kind}
-                              {a.file_name ? `: ${a.file_name}` : ""}
-                              {!a.url && " (no URL)"}
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                      <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-[var(--muted)]">
-                        <button
-                          type="button"
-                          className="hover:text-[var(--brand)]"
-                          onClick={() => setRawMsg(m.raw || m)}
-                        >
-                          raw
-                        </button>
-                        <span>
-                          {ch.label}
-                          {" · "}
-                          {formatInTimeZone(m.createdAt, timeZone, {
-                            day: "2-digit",
-                            month: "short",
-                            hour: "numeric",
-                            minute: "2-digit",
-                            hour12: true,
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                    {!fromCustomer && (
-                      <ProfileAvatar
-                        name={m.actorName}
-                        id={m.actorId}
-                        size={28}
-                        onClick={() =>
-                          setActorInfo({
-                            id: m.actorId,
-                            name: m.actorName,
-                            email: m.actorEmail,
-                            type: m.actorType,
-                            href: m.actorId
-                              ? `/responders/${m.actorId}`
-                              : null,
-                          })
-                        }
-                      />
-                    )}
-                  </div>
-                )}
+                <MessageBubble
+                  message={m}
+                  channelKind={ch.kind}
+                  channelName={m.channelName}
+                  timeZone={timeZone}
+                  customerFallbackName={customer?.name}
+                  onActorClick={(msg: ChatMsg) => {
+                    const fromCustomer = msg.actorType === "user";
+                    setActorInfo({
+                      id: msg.actorId || (fromCustomer ? userId : null),
+                      name:
+                        msg.actorName ||
+                        (fromCustomer ? customer?.name : null) ||
+                        null,
+                      email:
+                        msg.actorEmail ||
+                        (fromCustomer ? customer?.email : null) ||
+                        null,
+                      type: fromCustomer ? "customer" : msg.actorType,
+                      href: fromCustomer
+                        ? `/users/${msg.actorId || userId}`
+                        : msg.actorId
+                          ? `/responders/${msg.actorId}`
+                          : null,
+                    });
+                  }}
+                  onRawClick={(msg: ChatMsg) => setRawMsg(msg.raw || msg)}
+                />
               </div>
             );
           })}

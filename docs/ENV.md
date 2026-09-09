@@ -17,7 +17,10 @@
 |----------|---------|---------|
 | `REPORTING_TIMEZONE` | `Asia/Dubai` | Default timezone when URL has no `?tz=` |
 | `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Support Analytics | Chrome branding |
-| `DASHBOARD_API_SECRET` | _(empty)_ | Optional Bearer gate on `/api/*` |
+| `DASHBOARD_API_SECRET` | _(empty)_ | Optional Bearer gate for scripts hitting `/api/*` |
+| `DASHBOARD_ADMIN_USER` | `admin` | Login username when password is set |
+| `DASHBOARD_ADMIN_PASSWORD` | `admin` | When set, UI + APIs require admin login (cookie session) |
+| `DASHBOARD_SESSION_SECRET` | _(derived)_ | HMAC secret for session cookies |
 | `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats |
 | `SYNC_EVENTS` | (all core Extract events) | Which reports to sync |
 | `LOG_LEVEL` / `LOG_TO_FILE` | `info` / `true` | Sync logging |
@@ -46,6 +49,10 @@ FRESHCHAT_API_TOKEN=paste_token_here
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DB=freshchat_analytics
 REPORTING_TIMEZONE=Asia/Dubai
+DASHBOARD_ADMIN_USER=admin
+DASHBOARD_ADMIN_PASSWORD=admin
 ```
+
+When `DASHBOARD_ADMIN_PASSWORD` is set, visiting the app redirects to `/login`. Default local login: **admin / admin**. Sign out from the header.
 
 See also [LOGGING.md](./LOGGING.md) and comments in [`.env.example`](../.env.example).

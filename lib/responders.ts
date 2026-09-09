@@ -1,6 +1,7 @@
 import { collections } from "@/lib/db/client";
 import { getConfig } from "@/lib/config";
 import { buildConversationMatch, type ConversationFilters } from "@/lib/filters";
+import { resolveSearchUserIds } from "@/lib/search";
 
 function displayName(u: {
   first_name?: string | null;
@@ -128,11 +129,17 @@ export async function getResponderAnalytics(
   filters: ConversationFilters,
 ) {
   const { conversations } = await collections();
-  const base = buildConversationMatch({
-    ...filters,
-    agentIds: [agentId],
-    agent: agentId,
-  });
+  const searchUserIds = filters.q?.trim()
+    ? await resolveSearchUserIds(filters.q)
+    : [];
+  const base = buildConversationMatch(
+    {
+      ...filters,
+      agentIds: [agentId],
+      agent: agentId,
+    },
+    searchUserIds,
+  );
 
   const [stats] = await conversations
     .aggregate([

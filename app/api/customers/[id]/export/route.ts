@@ -9,7 +9,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const denied = requireApiAuth(req);
+  const denied = await requireApiAuth(req);
   if (denied) return denied;
 
   const { id } = await ctx.params;

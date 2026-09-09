@@ -72,8 +72,18 @@ const ConfigSchema = z.object({
   CUSTOMER_CHAT_PAGE_SIZE: z.coerce.number().int().positive().default(50),
   /** Soft cap for CSV export rows */
   EXPORT_CSV_MAX_ROWS: z.coerce.number().int().positive().default(10000),
-  /** Optional Bearer secret for /api/* (empty = open for local) */
+  /** Optional Bearer secret for /api/* (empty = cookie session only) */
   DASHBOARD_API_SECRET: z.string().optional().default(""),
+  /**
+   * Admin login for the UI. When password is non-empty, middleware requires
+   * a signed session cookie (pages + APIs). Leave password empty only for
+   * open local prototyping — not for shared/staging/prod.
+   */
+  DASHBOARD_ADMIN_USER: z.string().optional().default("admin"),
+  /** Empty disables the login gate. Default `admin` for local locked dashboard. */
+  DASHBOARD_ADMIN_PASSWORD: z.string().optional().default("admin"),
+  /** HMAC secret for session cookies (falls back to password-derived) */
+  DASHBOARD_SESSION_SECRET: z.string().optional().default(""),
 
   // --- Sync (defaults; override only if needed) ---
   /** First-run lookback when no cursor exists */

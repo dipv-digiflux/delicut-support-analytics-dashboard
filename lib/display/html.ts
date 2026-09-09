@@ -47,6 +47,9 @@ export function sanitizeMessageHtml(input: string): string {
     return `<${t}>`;
   });
 
+  // Strip leftover markdown markers often mixed into Freshchat HTML (e.g. <b>**Mon</b>)
+  s = s.replace(/\*\*/g, "").replace(/(^|[^*])\*([^*]|$)/g, "$1$2");
+
   return s;
 }
 

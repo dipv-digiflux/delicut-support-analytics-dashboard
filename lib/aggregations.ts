@@ -5,15 +5,23 @@ import {
   sortSpec,
   type ConversationFilters,
 } from "@/lib/filters";
+import { resolveSearchUserIds } from "@/lib/search";
 
 function avg(nums: number[]): number | null {
   if (!nums.length) return null;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
+async function matchFor(filters: ConversationFilters) {
+  const searchUserIds = filters.q?.trim()
+    ? await resolveSearchUserIds(filters.q)
+    : [];
+  return buildConversationMatch(filters, searchUserIds);
+}
+
 export async function getKpis(filters: ConversationFilters) {
   const { conversations } = await collections();
-  const match = buildConversationMatch(filters);
+  const match = await matchFor(filters);
 
   const [stats] = await conversations
     .aggregate([
@@ -449,7 +457,7 @@ async function dimensionBreakdown(
 
 export async function listConversations(filters: ConversationFilters) {
   const { conversations, users } = await collections();
-  const match = buildConversationMatch(filters);
+  const match = await matchFor(filters);
   const totalItems = await conversations.countDocuments(match);
   const items = await conversations
     .find(match)
@@ -586,27 +594,99 @@ export async function getConversation(id: string) {
           },
         ]
       : [],
-    messages: c.messages.map((m) => ({
-      id: m.message_id,
+    messageCount: c.message_count,
+    /** Prefer paginated /messages API — include a small preview only */
+    messages: [],
+    raw: c,
+  };
+}
+
+/** Newest-first page of messages for one conversation (infinite scroll). */
+export async function listConversationMessages(opts: {
+  conversationId: string;
+  before?: string;
+  limit?: number;
+}) {
+  const { conversations } = await collections();
+  const limit = Math.min(opts.limit ?? 40, 100);
+
+  const rows = await conversations
+    .aggregate([
+      { $match: { _id: opts.conversationId } },
+      { $unwind: "$messages" },
+      ...(opts.before
+        ? [
+            {
+              $match: {
+                "messages.created_at": { $lt: new Date(opts.before) },
+              },
+            },
+          ]
+        : []),
+      { $sort: { "messages.created_at": -1, "messages.message_id": -1 } },
+      { $limit: limit + 1 },
+      {
+        $project: {
+          channelName: "$channel_name",
+          channelId: "$channel_id",
+          message: "$messages",
+        },
+      },
+    ])
+    .toArray();
+
+  const hasMore = rows.length > limit;
+  const slice = rows.slice(0, limit);
+
+  const items = slice.map((r) => {
+    const m = r.message as {
+      message_id: string;
+      created_at: Date;
+      actor_type: string;
+      actor_id: string | null;
+      actor_email?: string | null;
+      actor_first_name?: string | null;
+      actor_last_name?: string | null;
+      text: string;
+      has_attachment: boolean;
+      attachments?: unknown[];
+      message_source?: string | null;
+      raw?: Record<string, string>;
+    };
+    const actorName = [m.actor_first_name, m.actor_last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return {
+      messageId: m.message_id,
+      conversationId: opts.conversationId,
+      createdAt: m.created_at,
       actorType: m.actor_type,
       actorId: m.actor_id,
-      actorName:
-        [m.actor_first_name, m.actor_last_name].filter(Boolean).join(" ") ||
-        null,
-      actorEmail: m.actor_email,
-      body: m.text,
-      contentType: m.message_type || "text",
-      messageSource: m.message_source,
-      createdAt: m.created_at,
+      actorName: actorName || null,
+      actorEmail: m.actor_email || null,
+      text: m.text,
       hasAttachment: m.has_attachment,
-      attachments: m.attachments || [],
-    })),
-  };
+      attachments: (m.attachments || []) as {
+        kind: string;
+        url: string | null;
+        file_name: string | null;
+        mime_type?: string | null;
+        thumbnail_url?: string | null;
+      }[],
+      channelName: (r.channelName as string) || null,
+      channelId: (r.channelId as string) || null,
+      messageSource: m.message_source || null,
+      raw: m.raw || null,
+    };
+  });
+
+  return { items, hasMore };
 }
 
 export async function exportConversationsCsv(filters: ConversationFilters) {
   const { conversations, users } = await collections();
-  const match = buildConversationMatch({ ...filters, page: 1, limit: 25 });
+  const match = await matchFor({ ...filters, page: 1, limit: 25 });
   const EXPORT_CAP = getConfig().EXPORT_CSV_MAX_ROWS;
   const totalMatched = await conversations.countDocuments(match);
   const items = await conversations

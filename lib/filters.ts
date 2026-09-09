@@ -37,6 +37,48 @@ const SORT_ALLOW = new Set([
   "csat",
   "subject",
   "agent",
+  "channel",
+  "group",
+  "resolved",
+  "reopened",
+  "message_count",
+  "frt",
+  "resolution_time",
+  // customers
+  "name",
+  "email",
+  "phone",
+  "last_seen_at",
+  "first_seen_at",
+  "conversation_count",
+  "customer_messages",
+]);
+
+export const CONVERSATION_SORT_KEYS = new Set([
+  "created_at",
+  "updated_at",
+  "resolved_at",
+  "last_message_at",
+  "csat",
+  "subject",
+  "agent",
+  "channel",
+  "group",
+  "resolved",
+  "reopened",
+  "message_count",
+  "frt",
+  "resolution_time",
+]);
+
+export const CUSTOMER_SORT_KEYS = new Set([
+  "name",
+  "email",
+  "phone",
+  "last_seen_at",
+  "first_seen_at",
+  "conversation_count",
+  "customer_messages",
 ]);
 
 function getAll(
@@ -104,9 +146,12 @@ export function parseFilters(
   };
 }
 
-/** Inclusive calendar dates of `from`/`to` interpreted in `filters.timeZone`. */
+/** Inclusive calendar dates of `from`/`to` interpreted in `filters.timeZone`.
+ *  Pass `searchUserIds` from `resolveSearchUserIds(filters.q)` so name/phone/email search hits chats.
+ */
 export function buildConversationMatch(
   filters: ConversationFilters,
+  searchUserIds?: string[],
 ): Record<string, unknown> {
   const and: object[] = [];
 
@@ -216,16 +261,25 @@ export function buildConversationMatch(
       $regex: filters.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
       $options: "i",
     };
-    and.push({
-      $or: [
-        { _id: re },
-        { assigned_agent_name: re },
-        { channel_name: re },
-        { "messages.text": re },
-        { primary_user_id: re },
-        { "resolution.label": re },
-      ],
-    });
+    const or: object[] = [
+      { _id: re },
+      { assigned_agent_name: re },
+      { assigned_agent_id: re },
+      { channel_name: re },
+      { group_name: re },
+      { "messages.text": re },
+      { primary_user_id: re },
+      { "resolution.label": re },
+      { "resolution.sub_label": re },
+      { "derived.subject": re },
+    ];
+    if (searchUserIds?.length) {
+      or.push(
+        { primary_user_id: { $in: searchUserIds } },
+        { user_ids: { $in: searchUserIds } },
+      );
+    }
+    and.push({ $or: or });
   }
 
   if (and.length === 0) return {};
@@ -239,9 +293,23 @@ export function sortSpec(filters: ConversationFilters): Record<string, 1 | -1> {
     case "csat":
       return { "csat.rating": dir, created_at: -1 };
     case "subject":
-      return { "derived.subject": dir, created_at: -1 };
+      return { "resolution.label": dir, "derived.subject": dir, created_at: -1 };
     case "agent":
       return { assigned_agent_name: dir, created_at: -1 };
+    case "channel":
+      return { channel_name: dir, created_at: -1 };
+    case "group":
+      return { group_name: dir, created_at: -1 };
+    case "resolved":
+      return { resolved: dir, created_at: -1 };
+    case "reopened":
+      return { reopened: dir, created_at: -1 };
+    case "message_count":
+      return { message_count: dir, created_at: -1 };
+    case "frt":
+      return { "metrics.first_response_time_seconds": dir, created_at: -1 };
+    case "resolution_time":
+      return { "metrics.resolution_time_seconds": dir, created_at: -1 };
     case "resolved_at":
       return { resolved_at: dir };
     case "updated_at":
@@ -250,6 +318,27 @@ export function sortSpec(filters: ConversationFilters): Record<string, 1 | -1> {
       return { last_message_at: dir };
     default:
       return { created_at: dir };
+  }
+}
+
+/** Mongo sort for customers collection fields. */
+export function customerMongoSort(
+  filters: ConversationFilters,
+): Record<string, 1 | -1> | null {
+  const dir = filters.order === "asc" ? 1 : -1;
+  switch (filters.sort) {
+    case "name":
+      return { first_name: dir, last_name: dir };
+    case "email":
+      return { email: dir };
+    case "phone":
+      return { phone: dir };
+    case "first_seen_at":
+      return { "stats.first_seen_at": dir };
+    case "last_seen_at":
+      return { "stats.last_seen_at": dir };
+    default:
+      return null; // computed sorts handled in listCustomers
   }
 }
 

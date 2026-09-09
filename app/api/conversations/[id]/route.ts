@@ -6,7 +6,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const denied = assertApiAccess(req);
+  const denied = await assertApiAccess(req);
   if (denied) return denied;
 
   try {

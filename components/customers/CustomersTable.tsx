@@ -8,6 +8,7 @@ import {
   useColumnVisibility,
   type ColumnDef,
 } from "@/components/ui/ColumnPicker";
+import { SortHeader } from "@/components/ui/SortHeader";
 import { formatInTimeZone } from "@/lib/timezone";
 
 export type CustomerRow = {
@@ -50,6 +51,17 @@ const ALL_COLUMNS = [
 
 type ColId = (typeof ALL_COLUMNS)[number]["id"];
 
+/** Column id → URL `sort` key. */
+const COL_SORT: Partial<Record<ColId, string>> = {
+  name: "name",
+  email: "email",
+  phone: "phone",
+  conversations: "conversation_count",
+  messages: "customer_messages",
+  firstSeen: "first_seen_at",
+  lastSeen: "last_seen_at",
+};
+
 function fmtWhen(
   value: string | Date | null | undefined,
   timeZone: string,
@@ -69,11 +81,15 @@ export function CustomersTable({
   timeZone,
   linkQuery,
   emptyHint,
+  currentSort = "last_seen_at",
+  currentOrder = "desc",
 }: {
   items: CustomerRow[];
   timeZone: string;
   linkQuery: string;
   emptyHint: string;
+  currentSort?: string;
+  currentOrder?: "asc" | "desc";
 }) {
   const { visible, persist, cols, defaults } = useColumnVisibility<ColId>(
     STORAGE_KEY,
@@ -96,7 +112,14 @@ export function CustomersTable({
           <thead>
             <tr>
               {cols.map((c) => (
-                <th key={c.id}>{c.label}</th>
+                <th key={c.id}>
+                  <SortHeader
+                    label={c.label}
+                    sortKey={COL_SORT[c.id]}
+                    currentSort={currentSort}
+                    currentOrder={currentOrder}
+                  />
+                </th>
               ))}
             </tr>
           </thead>

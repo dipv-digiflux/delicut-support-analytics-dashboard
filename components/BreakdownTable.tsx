@@ -1,3 +1,7 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
 function fmtPct(n: number | null | undefined) {
   if (n == null) return "—";
   return `${(n * 100).toFixed(1)}%`;
@@ -32,6 +36,45 @@ export type BreakdownRow = {
   avgResolutionSeconds: number | null;
 };
 
+type SortKey =
+  | "name"
+  | "conversations"
+  | "resolutionRate"
+  | "reopenRate"
+  | "avgCsat"
+  | "satisfiedRate"
+  | "csatResponseRate"
+  | "avgMessages"
+  | "avgFirstResponseSeconds"
+  | "avgResolutionSeconds";
+
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "conversations", label: "Chats" },
+  { key: "resolutionRate", label: "Resolved %" },
+  { key: "reopenRate", label: "Reopen %" },
+  { key: "avgCsat", label: "Avg CSAT" },
+  { key: "satisfiedRate", label: "Satisfied %" },
+  { key: "csatResponseRate", label: "CSAT resp %" },
+  { key: "avgMessages", label: "Avg msgs" },
+  { key: "avgFirstResponseSeconds", label: "Avg FRT" },
+  { key: "avgResolutionSeconds", label: "Avg resolve" },
+];
+
+function cmpNullish(
+  a: number | string | null | undefined,
+  b: number | string | null | undefined,
+  dir: 1 | -1,
+): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  if (typeof a === "string" && typeof b === "string") {
+    return a.localeCompare(b) * dir;
+  }
+  return ((a as number) - (b as number)) * dir;
+}
+
 export function BreakdownTable({
   title,
   subtitle,
@@ -43,6 +86,26 @@ export function BreakdownTable({
   rows: BreakdownRow[];
   nameHeader?: string;
 }) {
+  const [sortKey, setSortKey] = useState<SortKey>("conversations");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
+  const sorted = useMemo(() => {
+    const dir = order === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sortKey === "name") return cmpNullish(a.name, b.name, dir);
+      return cmpNullish(a[sortKey], b[sortKey], dir);
+    });
+  }, [rows, sortKey, order]);
+
+  const onSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setOrder((o) => (o === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setOrder(key === "name" ? "asc" : "desc");
+    }
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="border-b border-slate-100 px-4 py-3">
@@ -55,20 +118,31 @@ export function BreakdownTable({
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-2 font-medium">{nameHeader}</th>
-              <th className="px-3 py-2 font-medium">Chats</th>
-              <th className="px-3 py-2 font-medium">Resolved %</th>
-              <th className="px-3 py-2 font-medium">Reopen %</th>
-              <th className="px-3 py-2 font-medium">Avg CSAT</th>
-              <th className="px-3 py-2 font-medium">Satisfied %</th>
-              <th className="px-3 py-2 font-medium">CSAT resp %</th>
-              <th className="px-3 py-2 font-medium">Avg msgs</th>
-              <th className="px-3 py-2 font-medium">Avg FRT</th>
-              <th className="px-3 py-2 font-medium">Avg resolve</th>
+              {COLUMNS.map((c) => {
+                const label = c.key === "name" ? nameHeader : c.label;
+                const active = sortKey === c.key;
+                return (
+                  <th key={c.key} className="px-3 py-2 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => onSort(c.key)}
+                      className={`inline-flex items-center gap-1 whitespace-nowrap hover:text-[var(--brand)] ${
+                        active ? "text-[var(--brand-ink)]" : ""
+                      }`}
+                      title={`Sort by ${label}`}
+                    >
+                      {label}
+                      <span className="text-[10px] text-slate-400" aria-hidden>
+                        {active ? (order === "asc" ? "▲" : "▼") : "↕"}
+                      </span>
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
                 <td
                   colSpan={10}
@@ -78,7 +152,7 @@ export function BreakdownTable({
                 </td>
               </tr>
             )}
-            {rows.map((r) => (
+            {sorted.map((r) => (
               <tr
                 key={r.id + r.name}
                 className="border-t border-slate-100 hover:bg-slate-50"
