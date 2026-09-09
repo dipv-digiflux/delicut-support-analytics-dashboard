@@ -2,6 +2,8 @@
 .next/
 node_modules/
 .cache/
+logs/**
+!logs/.gitkeep
 .env
 .env.local
 .env.*.local

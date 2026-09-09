@@ -30,9 +30,18 @@ export interface SyncOptions {
 
 export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
   const cfg = requireFreshchatConfig();
-  const logger = createLogger();
   const runId = ulid();
-  logger.setRunId(runId);
+  const logger = createLogger(runId);
+  // Prune old logs once per sync start (cheap)
+  if (cfg.LOG_TO_FILE) {
+    const pruned = (await import("@/lib/log/logger")).pruneOldLogs();
+    if (pruned.deleted.length) {
+      logger.info(
+        `log prune: removed ${pruned.deleted.length} old file(s), kept ${pruned.kept}`,
+      );
+    }
+    logger.info(`logging to file: ${logger.getFilePaths().join(", ")}`);
+  }
 
   const mode = options.mode || "incremental";
   const lookback = options.lookbackDays ?? cfg.SYNC_LOOKBACK_DAYS;
@@ -187,6 +196,10 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
     logger.info(
       `DONE in ${elapsed}s — status=${run.status} created:${run.counters.conversations_inserted} updated:${run.counters.conversations_updated} unchanged:${run.counters.conversations_unchanged} errors:${run.errors.length + run.counters.windows_failed}`,
     );
+    if (logger.getFilePaths().length) {
+      logger.info(`log files: ${logger.getFilePaths().join(" | ")}`);
+    }
+    await logger.close();
   }
 
   return run;

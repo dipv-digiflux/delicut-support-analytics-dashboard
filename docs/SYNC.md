@@ -30,3 +30,7 @@ npm run sync -- --lookback=3
 npm run sync -- --lookback=3   # expect unchanged
 npm run verify -- --checks
 ```
+
+## Logs
+
+Sync writes NDJSON under `logs/` by default (`sync-latest.log`, daily, `runs/<run_id>.log`). See [LOGGING.md](./LOGGING.md).

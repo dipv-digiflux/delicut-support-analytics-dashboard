@@ -13,6 +13,7 @@ We do **not** invent CSAT, labels, or rewrite transcripts — optional keyword c
 | [docs/FRESHCHAT_ADMIN_CHECKLIST.md](./docs/FRESHCHAT_ADMIN_CHECKLIST.md) | Freshchat admin setup |
 | [docs/BUILD_PLAN.md](./docs/BUILD_PLAN.md) | Architecture / phases |
 | [docs/SYNC.md](./docs/SYNC.md) | Sync / ledger notes |
+| [docs/LOGGING.md](./docs/LOGGING.md) | Sync log files, prune, retention |
 
 ## Setup
 

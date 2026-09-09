@@ -111,10 +111,15 @@ User enrichment only **adds** name/email/phone from Freshchat — it does not in
 
 ## Logging
 
-| Variable | What it’s for |
-|----------|----------------|
-| `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` |
-| `LOG_FORMAT` | `auto` \| `tty` \| `json` |
+| Variable | Default | What it’s for |
+|----------|---------|----------------|
+| `LOG_TO_FILE` | `true` | Write NDJSON files under `LOG_DIR` as well as console |
+| `LOG_DIR` | `logs` | Folder for sync logs (`sync-latest.log`, daily, `runs/`) |
+| `LOG_RETENTION_DAYS` | `14` | Auto-delete older `*.log` on each sync start |
+| `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
+| `LOG_FORMAT` | `auto` | `auto` \| `tty` \| `json` |
+
+See [LOGGING.md](./LOGGING.md) for layout, prune commands, and best practices.
 
 ---
 

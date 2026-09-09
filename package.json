@@ -11,7 +11,9 @@
     "sync": "tsx scripts/sync.ts",
     "sync:year": "tsx scripts/sync-year.ts",
     "verify": "tsx scripts/verify.ts",
-    "reclassify": "tsx scripts/reclassify.ts"
+    "reclassify": "tsx scripts/reclassify.ts",
+    "logs:list": "tsx scripts/logs-prune.ts --list",
+    "logs:prune": "tsx scripts/logs-prune.ts"
   },
   "dependencies": {
     "chart.js": "^4.4.8",

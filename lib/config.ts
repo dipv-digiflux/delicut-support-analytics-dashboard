@@ -62,6 +62,16 @@ const ConfigSchema = z.object({
   SYNC_STALE_AFTER_MINUTES: z.coerce.number().int().positive().default(60),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   LOG_FORMAT: z.enum(["auto", "tty", "json"]).default("auto"),
+  LOG_TO_FILE: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) =>
+      v === undefined || v === null || v === ""
+        ? true
+        : v === true || v === "true",
+    ),
+  LOG_DIR: z.string().default("logs"),
+  LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(14),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema> & {
@@ -94,6 +104,7 @@ export function getConfig(): AppConfig {
     FRESHCHAT_API_BASE: base,
     CLASSIFY_ENABLED: Boolean(data.CLASSIFY_ENABLED),
     CLASSIFY_LLM_ENABLED: Boolean(data.CLASSIFY_LLM_ENABLED),
+    LOG_TO_FILE: Boolean(data.LOG_TO_FILE),
     syncEvents,
     hasFreshchatCredentials: Boolean(
       data.FRESHCHAT_API_TOKEN && base && !base.includes("your-domain"),
