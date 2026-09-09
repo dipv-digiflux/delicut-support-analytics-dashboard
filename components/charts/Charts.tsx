@@ -13,6 +13,7 @@ import {
   Filler,
 } from "chart.js";
 import { Line, Doughnut, Bar } from "react-chartjs-2";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 ChartJS.register(
   CategoryScale,
@@ -26,9 +27,18 @@ ChartJS.register(
   Filler,
 );
 
-const slate = "#64748b";
-const blue = "#2563eb";
+const slate = "#6b7280";
+const blue = "#e31c23";
 const csatColors = ["#dc2626", "#f97316", "#d97706", "#65a30d", "#16a34a"];
+
+const compactOpts = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false as const },
+    tooltip: { enabled: true },
+  },
+};
 
 export function DailyCsatChart({
   data,
@@ -36,7 +46,10 @@ export function DailyCsatChart({
   data: { date: string; average: number; ratedCount: number }[];
 }) {
   return (
-    <ChartCard title="Daily CSAT trend">
+    <ChartCard
+      title="Daily CSAT trend"
+      tip="Average CSAT by conversation created day (rated chats only). Hover a point for rated count."
+    >
       {data.length === 0 ? (
         <Empty />
       ) : (
@@ -48,18 +61,30 @@ export function DailyCsatChart({
                 label: "Avg CSAT",
                 data: data.map((d) => d.average),
                 borderColor: blue,
-                backgroundColor: "rgba(37,99,235,0.1)",
+                backgroundColor: "rgba(227,28,35,0.1)",
                 fill: true,
                 tension: 0.3,
               },
             ],
           }}
           options={{
-            responsive: true,
-            plugins: { legend: { display: false } },
+            ...compactOpts,
+            plugins: {
+              ...compactOpts.plugins,
+              tooltip: {
+                callbacks: {
+                  afterLabel: (ctx) => {
+                    const row = data[ctx.dataIndex];
+                    return row ? `Rated n=${row.ratedCount}` : "";
+                  },
+                },
+              },
+            },
             scales: {
-              y: { min: 1, max: 5, ticks: { color: slate } },
-              x: { ticks: { color: slate, maxRotation: 0 } },
+              y: { min: 1, max: 5, ticks: { color: slate, font: { size: 10 } } },
+              x: {
+                ticks: { color: slate, maxRotation: 0, font: { size: 9 }, maxTicksLimit: 8 },
+              },
             },
           }}
         />
@@ -75,7 +100,10 @@ export function CsatDistributionChart({
 }) {
   const total = data.reduce((s, d) => s + d.count, 0);
   return (
-    <ChartCard title="CSAT distribution">
+    <ChartCard
+      title="CSAT distribution"
+      tip="Count of ratings 1–5 in the filtered range. Unrated chats are excluded."
+    >
       {total === 0 ? (
         <Empty />
       ) : (
@@ -92,7 +120,18 @@ export function CsatDistributionChart({
           }}
           options={{
             responsive: true,
-            plugins: { legend: { position: "bottom" } },
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+              tooltip: {
+                callbacks: {
+                  afterLabel: (ctx) => {
+                    const n = Number(ctx.raw) || 0;
+                    return total ? `${((n / total) * 100).toFixed(1)}% of rated` : "";
+                  },
+                },
+              },
+            },
           }}
         />
       )}
@@ -106,27 +145,24 @@ export function SubjectBarChart({
   data: { subject: string; label: string; count: number }[];
 }) {
   return (
-    <ChartCard title="Conversations by Freshchat label">
+    <ChartCard
+      title="By Freshchat label"
+      tip="Conversation volume by resolution label from Freshchat (not invented topics)."
+    >
       {data.length === 0 ? (
         <Empty />
       ) : (
         <Bar
           data={{
             labels: data.map((d) => d.label),
-            datasets: [
-              {
-                data: data.map((d) => d.count),
-                backgroundColor: blue,
-              },
-            ],
+            datasets: [{ data: data.map((d) => d.count), backgroundColor: blue }],
           }}
           options={{
+            ...compactOpts,
             indexAxis: "y",
-            responsive: true,
-            plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { color: slate } },
-              y: { ticks: { color: slate } },
+              x: { ticks: { color: slate, font: { size: 10 } } },
+              y: { ticks: { color: slate, font: { size: 10 } } },
             },
           }}
         />
@@ -141,7 +177,10 @@ export function DailyVolumeChart({
   data: { date: string; count: number; resolved: number }[];
 }) {
   return (
-    <ChartCard title="Daily volume (created vs resolved-by-day)">
+    <ChartCard
+      title="Daily volume"
+      tip="Created vs resolved-by-day for conversations matching current filters."
+    >
       {data.length === 0 ? (
         <Empty />
       ) : (
@@ -163,10 +202,15 @@ export function DailyVolumeChart({
           }}
           options={{
             responsive: true,
-            plugins: { legend: { position: "bottom" } },
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+            },
             scales: {
-              x: { ticks: { color: slate, maxRotation: 0 } },
-              y: { ticks: { color: slate } },
+              x: {
+                ticks: { color: slate, maxRotation: 0, font: { size: 9 }, maxTicksLimit: 8 },
+              },
+              y: { ticks: { color: slate, font: { size: 10 } } },
             },
           }}
         />
@@ -181,27 +225,24 @@ export function ChannelBarChart({
   data: { channel: string; count: number }[];
 }) {
   return (
-    <ChartCard title="By channel">
+    <ChartCard
+      title="By channel"
+      tip="Conversation count per Freshchat channel (WhatsApp, IG, Phone, etc.)."
+    >
       {data.length === 0 ? (
         <Empty />
       ) : (
         <Bar
           data={{
             labels: data.map((d) => d.channel),
-            datasets: [
-              {
-                data: data.map((d) => d.count),
-                backgroundColor: "#6366f1",
-              },
-            ],
+            datasets: [{ data: data.map((d) => d.count), backgroundColor: "#6366f1" }],
           }}
           options={{
+            ...compactOpts,
             indexAxis: "y",
-            responsive: true,
-            plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { color: slate } },
-              y: { ticks: { color: slate } },
+              x: { ticks: { color: slate, font: { size: 10 } } },
+              y: { ticks: { color: slate, font: { size: 10 } } },
             },
           }}
         />
@@ -221,7 +262,10 @@ export function AgentCsatChart({
   }[];
 }) {
   return (
-    <ChartCard title="Avg CSAT by agent">
+    <ChartCard
+      title="Avg CSAT by responder"
+      tip="Average CSAT for assigned agent. * means fewer than 3 ratings — treat carefully."
+    >
       {data.length === 0 ? (
         <Empty />
       ) : (
@@ -231,17 +275,14 @@ export function AgentCsatChart({
               (d) => `${d.agentName}${d.ratedCount < 3 ? " *" : ""}`,
             ),
             datasets: [
-              {
-                data: data.map((d) => d.average),
-                backgroundColor: "#0d9488",
-              },
+              { data: data.map((d) => d.average), backgroundColor: "#0d9488" },
             ],
           }}
           options={{
+            ...compactOpts,
             indexAxis: "y",
-            responsive: true,
             plugins: {
-              legend: { display: false },
+              ...compactOpts.plugins,
               tooltip: {
                 callbacks: {
                   afterLabel: (ctx) => {
@@ -252,8 +293,8 @@ export function AgentCsatChart({
               },
             },
             scales: {
-              x: { min: 1, max: 5, ticks: { color: slate } },
-              y: { ticks: { color: slate } },
+              x: { min: 1, max: 5, ticks: { color: slate, font: { size: 10 } } },
+              y: { ticks: { color: slate, font: { size: 10 } } },
             },
           }}
         />
@@ -268,7 +309,10 @@ export function AgentVolumeChart({
   data: { agentId: string; agentName: string; count: number }[];
 }) {
   return (
-    <ChartCard title="Who's responding — chat volume by agent">
+    <ChartCard
+      title="Responder volume"
+      tip="How many chats each assigned agent handled in the filter range."
+    >
       {data.length === 0 ? (
         <Empty />
       ) : (
@@ -276,19 +320,15 @@ export function AgentVolumeChart({
           data={{
             labels: data.map((d) => d.agentName),
             datasets: [
-              {
-                data: data.map((d) => d.count),
-                backgroundColor: "#275ded",
-              },
+              { data: data.map((d) => d.count), backgroundColor: "#275ded" },
             ],
           }}
           options={{
+            ...compactOpts,
             indexAxis: "y",
-            responsive: true,
-            plugins: { legend: { display: false } },
             scales: {
-              x: { ticks: { color: slate } },
-              y: { ticks: { color: slate } },
+              x: { ticks: { color: slate, font: { size: 10 } } },
+              y: { ticks: { color: slate, font: { size: 10 } } },
             },
           }}
         />
@@ -299,22 +339,27 @@ export function AgentVolumeChart({
 
 function ChartCard({
   title,
+  tip,
   children,
 }: {
   title: string;
+  tip?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <h3 className="mb-3 text-sm font-medium text-slate-700">{title}</h3>
-      <div className="min-h-[220px]">{children}</div>
+    <div className="rounded-lg border border-[var(--border)] bg-white p-3">
+      <h3 className="mb-2 flex items-center text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+        {title}
+        {tip && <InfoTip text={tip} />}
+      </h3>
+      <div className="h-[160px]">{children}</div>
     </div>
   );
 }
 
 function Empty() {
   return (
-    <div className="flex h-[220px] items-center justify-center text-sm text-slate-400">
+    <div className="flex h-full items-center justify-center text-sm text-slate-400">
       No data for this filter
     </div>
   );

@@ -18,6 +18,7 @@ export interface ConversationFilters {
   channel?: string;
   group?: string;
   resolved?: "true" | "false";
+  reopened?: "true" | "false";
   csat?: string;
   q?: string;
   /** When true (default for KPIs), exclude stub orphans with no created_at */
@@ -69,7 +70,7 @@ export function parseFilters(
   const order = get("order") === "asc" ? "asc" : "desc";
   const page = Math.max(1, Number(get("page") || 1) || 1);
   const limitRaw = Number(get("limit") || 25) || 25;
-  const limit = [10, 25, 40, 50, 100].includes(limitRaw) ? limitRaw : 25;
+  const limit = [10, 20, 25, 40, 50, 100].includes(limitRaw) ? limitRaw : 25;
 
   const agentIds = getAll(sp, "agent");
   const legacyAgent = get("agent");
@@ -93,6 +94,7 @@ export function parseFilters(
     channel: get("channel"),
     group: get("group"),
     resolved: get("resolved") as "true" | "false" | undefined,
+    reopened: get("reopened") as "true" | "false" | undefined,
     csat: get("csat"),
     q: get("q"),
     page,
@@ -182,13 +184,19 @@ export function buildConversationMatch(
   if (filters.channelIds?.length) {
     and.push({ channel_id: { $in: filters.channelIds } });
   } else if (filters.channel) {
-    and.push({ channel_name: filters.channel });
+    const re = filters.channel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    and.push({
+      channel_name: { $regex: re, $options: "i" },
+    });
   }
 
   if (filters.group) and.push({ group_name: filters.group });
 
   if (filters.resolved === "true") and.push({ resolved: true });
   if (filters.resolved === "false") and.push({ resolved: false });
+
+  if (filters.reopened === "true") and.push({ reopened: true });
+  if (filters.reopened === "false") and.push({ reopened: false });
 
   if (filters.csat === "rated") and.push({ "csat.rating": { $ne: null } });
   else if (filters.csat === "unrated") {
@@ -268,6 +276,7 @@ export function filtersToQuery(filters: ConversationFilters): string {
   set("channel", filters.channel);
   set("group", filters.group);
   set("resolved", filters.resolved);
+  set("reopened", filters.reopened);
   set("csat", filters.csat);
   set("q", filters.q);
   set("sort", filters.sort);

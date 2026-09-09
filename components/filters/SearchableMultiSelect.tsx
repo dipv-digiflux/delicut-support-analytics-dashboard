@@ -30,13 +30,14 @@ export function SearchableMultiSelect({
   const [loading, setLoading] = useState(false);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const boxRef = useRef<HTMLDivElement>(null);
+  const selectedKey = selected.join("|");
 
   const load = useCallback(
     async (query: string) => {
       setLoading(true);
       try {
         const res = await fetch(
-          `${endpoint}?q=${encodeURIComponent(query)}&limit=30`,
+          `${endpoint}?q=${encodeURIComponent(query)}&limit=40`,
         );
         const json = await res.json();
         const items = (json.data?.items || []) as DirectoryOption[];
@@ -54,6 +55,30 @@ export function SearchableMultiSelect({
     },
     [endpoint],
   );
+
+  // Resolve chip labels for already-selected ids
+  useEffect(() => {
+    if (!selected.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${endpoint}?limit=100`);
+        const json = await res.json();
+        const items = (json.data?.items || []) as DirectoryOption[];
+        if (cancelled) return;
+        setLabels((prev) => {
+          const next = { ...prev };
+          for (const i of items) next[i.id] = i.name;
+          return next;
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [endpoint, selectedKey, selected.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -86,7 +111,9 @@ export function SearchableMultiSelect({
         <span className="truncate text-[var(--foreground)]">
           {selected.length === 0
             ? "All"
-            : selected.map((id) => labels[id] || id.slice(0, 8)).join(", ")}
+            : selected.length === 1
+              ? labels[selected[0]!] || selected[0]!.slice(0, 12)
+              : `${selected.length} selected`}
         </span>
         <span className="ml-2 text-[var(--muted)]">▾</span>
       </button>
@@ -97,15 +124,15 @@ export function SearchableMultiSelect({
               key={id}
               type="button"
               onClick={() => onChange(selected.filter((x) => x !== id))}
-              className="rounded-full bg-[var(--brand-100)] px-2 py-0.5 text-[11px] text-[var(--brand-800)]"
+              className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] text-[var(--brand)]"
             >
-              {(labels[id] || id).slice(0, 24)} ×
+              {(labels[id] || id).slice(0, 28)} ×
             </button>
           ))}
         </div>
       )}
       {open && (
-        <div className="absolute z-30 mt-1 w-72 rounded-xl border border-[var(--border)] bg-white p-2 shadow-lg">
+        <div className="absolute z-30 mt-1 w-80 rounded-xl border border-[var(--border)] bg-white p-2 shadow-lg">
           <input
             autoFocus
             className="mb-2 w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
@@ -127,13 +154,13 @@ export function SearchableMultiSelect({
                   key={o.id}
                   type="button"
                   onClick={() => toggle(o.id, o.name)}
-                  className={`flex w-full flex-col rounded-lg px-2 py-1.5 text-left hover:bg-[var(--brand-50)] ${
-                    on ? "bg-[var(--brand-50)]" : ""
+                  className={`flex w-full flex-col rounded-lg px-2 py-1.5 text-left hover:bg-[var(--brand-soft)] ${
+                    on ? "bg-[var(--brand-soft)]" : ""
                   }`}
                 >
                   <span className="font-medium">{o.name}</span>
-                  <span className="truncate font-mono text-[10px] text-[var(--muted)]">
-                    {o.email || o.id}
+                  <span className="truncate text-[10px] text-[var(--muted)]">
+                    {o.secondary || o.email || o.id}
                   </span>
                 </button>
               );

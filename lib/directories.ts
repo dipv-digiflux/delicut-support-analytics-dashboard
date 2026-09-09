@@ -1,5 +1,6 @@
 import { collections } from "@/lib/db/client";
 import { getConfig } from "@/lib/config";
+import { parseChannel } from "@/lib/display/channel";
 
 export interface DirectoryItem {
   id: string;
@@ -107,22 +108,39 @@ export async function listChannels(q?: string, limit = 40) {
       },
     },
     { $sort: { count: -1 } },
-    { $limit: Math.min(limit, 100) },
+    { $limit: 200 },
   ];
 
   const rows = await conversations.aggregate(pipeline).toArray();
-  let items = rows.map((r) => ({
-    id: String(r._id),
-    name: String(r.name || r._id),
-    count: r.count as number,
-  }));
+  let items = rows.map((r) => {
+    const raw = String(r.name || r._id);
+    const parsed = parseChannel(raw);
+    const identity = parsed.identity || null;
+    const label = identity
+      ? `${parsed.label} · ${identity}`
+      : parsed.label !== "Unknown"
+        ? `${parsed.label}${raw && parsed.label !== raw ? ` · ${raw}` : ""}`
+        : raw;
+    return {
+      id: String(r._id),
+      name: label,
+      email: raw,
+      secondary: `${r.count} chats`,
+      count: r.count as number,
+      rawName: raw,
+    };
+  });
+
   if (q?.trim()) {
     const needle = q.trim().toLowerCase();
     items = items.filter(
       (i) =>
         i.name.toLowerCase().includes(needle) ||
-        i.id.toLowerCase().includes(needle),
+        i.id.toLowerCase().includes(needle) ||
+        i.rawName.toLowerCase().includes(needle) ||
+        (i.email || "").toLowerCase().includes(needle),
     );
   }
-  return items;
+
+  return items.slice(0, Math.min(limit, 100));
 }

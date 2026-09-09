@@ -1,24 +1,88 @@
 @import "tailwindcss";
 
 :root {
-  --brand-950: #0b382b;
-  --brand-800: #14543f;
-  --brand-700: #176b4d;
-  --brand-600: #1f815e;
-  --brand-100: #dff3e9;
-  --brand-50: #f1faf5;
-  --background: #f6f8f5;
-  --foreground: #17221c;
-  --muted: #66736b;
+  /* Delicut RMS admin theme (matches staging-rms2) */
+  --brand: #e31c23;
+  --brand-hover: #c4181e;
+  --brand-soft: #fde8e9;
+  --brand-ink: #1a1a1a;
+  --background: #f5f6f8;
+  --foreground: #1f2937;
+  --muted: #6b7280;
   --card: #ffffff;
-  --border: #dce4de;
-  --accent: #1f815e;
-  --danger: #c73b3b;
-  --warning: #b97418;
-  --success: #23865d;
+  --border: #e5e7eb;
+  --sidebar: #f8f9fa;
+  --row-alt: #fafafa;
+  --danger: #e31c23;
+  --warning: #d97706;
+  --success: #16a34a;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Shared table look */
+.dc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.dc-table thead th {
+  background: #f3f4f6;
+  color: #4b5563;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.dc-table tbody td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.dc-table tbody tr:nth-child(even) {
+  background: var(--row-alt);
+}
+.dc-table tbody tr:hover {
+  background: #fff5f5;
+}
+.dc-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #374151;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.dc-count {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  padding: 0.15rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.dc-page-btn {
+  min-width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border);
+  background: white;
+  color: #4b5563;
+  font-size: 0.8rem;
+}
+.dc-page-btn[data-active="true"] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: white;
 }

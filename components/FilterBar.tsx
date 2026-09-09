@@ -1,17 +1,52 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useTransition } from "react";
+import { useCallback, useMemo, useRef, useTransition } from "react";
 import { SearchableMultiSelect } from "@/components/filters/SearchableMultiSelect";
+import {
+  ColumnPicker,
+  useColumnVisibility,
+  type ColumnDef,
+} from "@/components/ui/ColumnPicker";
+import { InfoTip } from "@/components/ui/InfoTip";
 
-export function FilterBar({ showSearch = false }: { showSearch?: boolean }) {
+const FILTER_STORAGE = "delicut.filters.visible.v1";
+
+const FILTER_DEFS = [
+  { id: "dates", label: "Date range", defaultOn: true },
+  { id: "responders", label: "Responders", defaultOn: true },
+  { id: "customers", label: "Customers", defaultOn: true },
+  { id: "channel", label: "Channel", defaultOn: true },
+  { id: "subject", label: "Subject / label", defaultOn: true },
+  { id: "group", label: "Group", defaultOn: true },
+  { id: "resolved", label: "Resolved", defaultOn: true },
+  { id: "reopened", label: "Reopened", defaultOn: false },
+  { id: "csat", label: "CSAT", defaultOn: true },
+  { id: "search", label: "Search", defaultOn: true },
+] as const satisfies readonly ColumnDef<string>[];
+
+type FilterId = (typeof FILTER_DEFS)[number]["id"];
+
+export function FilterBar({ showSearch = true }: { showSearch?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const qRef = useRef<HTMLInputElement>(null);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const groupRef = useRef<HTMLInputElement>(null);
+
+  const { visible, persist, defaults } = useColumnVisibility<FilterId>(
+    FILTER_STORAGE,
+    FILTER_DEFS,
+  );
 
   const agents = useMemo(() => sp.getAll("agent").filter(Boolean), [sp]);
   const users = useMemo(() => sp.getAll("user").filter(Boolean), [sp]);
+  const channels = useMemo(
+    () => sp.getAll("channelId").filter(Boolean),
+    [sp],
+  );
 
   const push = useCallback(
     (mutate: (next: URLSearchParams) => void) => {
@@ -39,112 +74,206 @@ export function FilterBar({ showSearch = false }: { showSearch?: boolean }) {
     });
   };
 
+  const applySearch = () => {
+    push((next) => {
+      const q = qRef.current?.value.trim() || "";
+      const subject = subjectRef.current?.value.trim() || "";
+      const group = groupRef.current?.value.trim() || "";
+      if (q) next.set("q", q);
+      else next.delete("q");
+      if (subject) next.set("subject", subject);
+      else next.delete("subject");
+      if (group) next.set("group", group);
+      else next.delete("group");
+    });
+  };
+
   const clear = () => startTransition(() => router.push(pathname));
+  const show = (id: FilterId) => visible[id] !== false;
 
   return (
-    <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+    <div className="mb-6 rounded-xl border border-[var(--border)] bg-white p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Filters
+          <InfoTip text="Filters apply to KPIs, tables, and CSV export. Dates use the timezone in the header (Dubai / IST / UTC). Use Filter fields to show/hide controls." />
+        </div>
+        <ColumnPicker
+          columns={FILTER_DEFS}
+          visible={visible}
+          defaults={defaults}
+          onChange={persist}
+          buttonLabel="Filter fields"
+        />
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="From">
-          <input
-            type="date"
-            className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            defaultValue={sp.get("from") || ""}
-            onChange={(e) => update("from", e.target.value)}
-          />
-        </Field>
-        <Field label="To">
-          <input
-            type="date"
-            className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            defaultValue={sp.get("to") || ""}
-            onChange={(e) => update("to", e.target.value)}
-          />
-        </Field>
+        {show("dates") && (
+          <>
+            <Field label="From">
+              <input
+                type="date"
+                className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+                defaultValue={sp.get("from") || ""}
+                onChange={(e) => update("from", e.target.value)}
+              />
+            </Field>
+            <Field label="To">
+              <input
+                type="date"
+                className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+                defaultValue={sp.get("to") || ""}
+                onChange={(e) => update("to", e.target.value)}
+              />
+            </Field>
+          </>
+        )}
 
-        <SearchableMultiSelect
-          label="Responders"
-          endpoint="/api/directories/agents"
-          paramKey="agent"
-          selected={agents}
-          onChange={(ids) => setMulti("agent", ids)}
-          placeholder="Search agents…"
-        />
-        <SearchableMultiSelect
-          label="Customers"
-          endpoint="/api/directories/customers"
-          paramKey="user"
-          selected={users}
-          onChange={(ids) => setMulti("user", ids)}
-          placeholder="Search customers…"
-        />
+        {show("responders") && (
+          <SearchableMultiSelect
+            label="Responders"
+            endpoint="/api/directories/agents"
+            paramKey="agent"
+            selected={agents}
+            onChange={(ids) => setMulti("agent", ids)}
+            placeholder="Search agents…"
+          />
+        )}
+        {show("customers") && (
+          <SearchableMultiSelect
+            label="Customers"
+            endpoint="/api/directories/customers"
+            paramKey="user"
+            selected={users}
+            onChange={(ids) => setMulti("user", ids)}
+            placeholder="Search customers…"
+          />
+        )}
+        {show("channel") && (
+          <SearchableMultiSelect
+            label="Channel"
+            endpoint="/api/directories/channels"
+            paramKey="channelId"
+            selected={channels}
+            onChange={(ids) => {
+              push((next) => {
+                next.delete("channelId");
+                next.delete("channel");
+                for (const id of ids) next.append("channelId", id);
+              });
+            }}
+            placeholder="Search channels…"
+          />
+        )}
 
-        <Field label="Subject">
-          <input
-            className="w-36 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            placeholder="label / unclassified"
-            defaultValue={sp.get("subject") || ""}
-            onBlur={(e) => update("subject", e.target.value.trim())}
-          />
-        </Field>
-        <Field label="Channel">
-          <input
-            className="w-36 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            placeholder="channel name"
-            defaultValue={sp.get("channel") || ""}
-            onBlur={(e) => update("channel", e.target.value.trim())}
-          />
-        </Field>
-        <Field label="Group">
-          <input
-            className="w-32 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            placeholder="group"
-            defaultValue={sp.get("group") || ""}
-            onBlur={(e) => update("group", e.target.value.trim())}
-          />
-        </Field>
-        <Field label="Resolved">
-          <select
-            className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            defaultValue={sp.get("resolved") || ""}
-            onChange={(e) => update("resolved", e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="true">Resolved</option>
-            <option value="false">Open</option>
-          </select>
-        </Field>
-        <Field label="CSAT">
-          <select
-            className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-            defaultValue={sp.get("csat") || ""}
-            onChange={(e) => update("csat", e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="rated">Rated</option>
-            <option value="unrated">Unrated</option>
-            <option value="satisfied">Satisfied (≥4)</option>
-            <option value="dissatisfied">Dissatisfied (≤2)</option>
-            <option value="5">5</option>
-            <option value="4">4</option>
-            <option value="3">3</option>
-            <option value="2">2</option>
-            <option value="1">1</option>
-          </select>
-        </Field>
-        {showSearch && (
-          <Field label="Search">
+        {show("subject") && (
+          <Field label="Subject">
             <input
-              className="w-48 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-              placeholder="id, text…"
-              defaultValue={sp.get("q") || ""}
-              onBlur={(e) => update("q", e.target.value.trim())}
+              ref={subjectRef}
+              className="w-36 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+              placeholder="label / unclassified"
+              defaultValue={sp.get("subject") || ""}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applySearch();
+                }
+              }}
             />
+          </Field>
+        )}
+        {show("group") && (
+          <Field label="Group">
+            <input
+              ref={groupRef}
+              className="w-32 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+              placeholder="group"
+              defaultValue={sp.get("group") || ""}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applySearch();
+                }
+              }}
+            />
+          </Field>
+        )}
+        {show("resolved") && (
+          <Field label="Resolved">
+            <select
+              className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+              defaultValue={sp.get("resolved") || ""}
+              onChange={(e) => update("resolved", e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="true">Resolved</option>
+              <option value="false">Open</option>
+            </select>
+          </Field>
+        )}
+        {show("reopened") && (
+          <Field label="Reopened">
+            <select
+              className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+              defaultValue={sp.get("reopened") || ""}
+              onChange={(e) => update("reopened", e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="true">Reopened</option>
+              <option value="false">Not reopened</option>
+            </select>
+          </Field>
+        )}
+        {show("csat") && (
+          <Field label="CSAT">
+            <select
+              className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+              defaultValue={sp.get("csat") || ""}
+              onChange={(e) => update("csat", e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="rated">Rated</option>
+              <option value="unrated">Unrated</option>
+              <option value="satisfied">Satisfied (≥4)</option>
+              <option value="dissatisfied">Dissatisfied (≤2)</option>
+              <option value="5">5</option>
+              <option value="4">4</option>
+              <option value="3">3</option>
+              <option value="2">2</option>
+              <option value="1">1</option>
+            </select>
+          </Field>
+        )}
+        {showSearch && show("search") && (
+          <Field label="Search">
+            <div className="flex items-center gap-2">
+              <input
+                ref={qRef}
+                className="w-48 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+                placeholder="id, phone, name…"
+                defaultValue={sp.get("q") || ""}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applySearch();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={applySearch}
+                disabled={pending}
+                className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[var(--brand-hover)] disabled:opacity-60"
+              >
+                Search
+              </button>
+            </div>
           </Field>
         )}
         <button
           type="button"
           onClick={clear}
-          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--muted)] hover:bg-[var(--brand-50)]"
+          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--muted)] hover:bg-[var(--brand-soft)]"
         >
           Clear
         </button>
@@ -164,9 +293,9 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
+    <div className="block">
       <div className="mb-1 text-xs font-medium text-[var(--muted)]">{label}</div>
       {children}
-    </label>
+    </div>
   );
 }

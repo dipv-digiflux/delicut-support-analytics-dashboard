@@ -26,6 +26,9 @@ export async function getKpis(filters: ConversationFilters) {
           resolvedCount: {
             $sum: { $cond: [{ $eq: ["$resolved", true] }, 1, 0] },
           },
+          openCount: {
+            $sum: { $cond: [{ $eq: ["$resolved", true] }, 0, 1] },
+          },
           reopenedCount: {
             $sum: { $cond: [{ $eq: ["$reopened", true] }, 1, 0] },
           },
@@ -38,6 +41,11 @@ export async function getKpis(filters: ConversationFilters) {
           satisfiedCount: {
             $sum: {
               $cond: [{ $gte: ["$csat.rating", 4] }, 1, 0],
+            },
+          },
+          dissatisfiedCount: {
+            $sum: {
+              $cond: [{ $lte: ["$csat.rating", 2] }, 1, 0],
             },
           },
           labeledCount: {
@@ -55,6 +63,40 @@ export async function getKpis(filters: ConversationFilters) {
             },
           },
           messageSum: { $sum: { $ifNull: ["$message_count", 0] } },
+          withAttachments: {
+            $sum: {
+              $cond: [
+                {
+                  $gt: [
+                    {
+                      $size: {
+                        $filter: {
+                          input: { $ifNull: ["$messages", []] },
+                          as: "m",
+                          cond: {
+                            $or: [
+                              { $eq: ["$$m.has_attachment", true] },
+                              {
+                                $gt: [
+                                  {
+                                    $size: { $ifNull: ["$$m.attachments", []] },
+                                  },
+                                  0,
+                                ],
+                              },
+                            ],
+                          },
+                        },
+                      },
+                    },
+                    0,
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
           frtValues: {
             $push: {
               $cond: [
@@ -82,8 +124,19 @@ export async function getKpis(filters: ConversationFilters) {
   const uniqueUsers = (stats?.uniqueUsers || []).filter(Boolean).length;
   const ratedCount = stats?.ratedCount || 0;
   const resolvedCount = stats?.resolvedCount || 0;
+  const openCount = stats?.openCount || 0;
+  const dissatisfiedCount = stats?.dissatisfiedCount || 0;
+  const withAttachments = stats?.withAttachments || 0;
   const frtAvg = avg((stats?.frtValues as number[]) || []);
   const resAvg = avg((stats?.resTimeValues as number[]) || []);
+  const frtValues = (stats?.frtValues as number[]) || [];
+  const resValues = (stats?.resTimeValues as number[]) || [];
+  const median = (nums: number[]) => {
+    if (!nums.length) return null;
+    const s = [...nums].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+  };
 
   const dailyVolume = await conversations
     .aggregate([
@@ -250,20 +303,28 @@ export async function getKpis(filters: ConversationFilters) {
     kpis: {
       total,
       uniqueUsers,
+      openCount,
+      openRate: total ? openCount / total : null,
       resolutionRate: total ? resolvedCount / total : null,
       reopenRate: total ? (stats?.reopenedCount || 0) / total : null,
       averageCsat: ratedCount ? stats.csatSum / ratedCount : null,
       ratedCount,
       csatResponseRate: total ? ratedCount / total : null,
       satisfiedRate: ratedCount ? stats.satisfiedCount / ratedCount : null,
+      dissatisfiedRate: ratedCount ? dissatisfiedCount / ratedCount : null,
       labelCoverage: total ? (stats?.labeledCount || 0) / total : null,
       avgMessages: total ? (stats?.messageSum || 0) / total : null,
       avgFirstResponseSeconds: frtAvg,
+      medianFirstResponseSeconds: median(frtValues),
       avgResolutionSeconds: resAvg,
+      medianResolutionSeconds: median(resValues),
+      chatsWithAttachments: withAttachments,
+      attachmentRate: total ? withAttachments / total : null,
       unassignedCount,
       unassignedRate: total ? unassignedCount / total : null,
       agentCount: agentDeep.length,
       channelCount: channelDeep.length,
+      groupCount: groupDeep.length,
     },
     charts: {
       dailyVolume: dailyVolumeMerged,

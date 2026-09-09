@@ -122,6 +122,13 @@ export async function mergeLabelRows(
             resolved: false,
             status: null,
             user_ids: [],
+            // Avoid $set / $setOnInsert path conflict on assigned_agent_*
+            ...(resolution.labeled_by_agent_id
+              ? {}
+              : {
+                  assigned_agent_id: null,
+                  assigned_agent_name: null,
+                }),
             agent_ids: resolution.labeled_by_agent_id
               ? [resolution.labeled_by_agent_id]
               : [],
@@ -134,8 +141,6 @@ export async function mergeLabelRows(
             is_stub: true,
             stub_reason: "label_orphan",
             first_seen_at: now,
-            assigned_agent_id: resolution.labeled_by_agent_id,
-            assigned_agent_name: resolution.agent_name,
           },
         },
         upsert: true,

@@ -34,3 +34,13 @@ npm run verify -- --checks
 ## Logs
 
 Sync writes NDJSON under `logs/` by default (`sync-latest.log`, daily, `runs/<run_id>.log`). See [LOGGING.md](./LOGGING.md).
+
+## Clean re-sync (e.g. Sep 1–5)
+
+```bash
+npm run db:reset -- --confirm=freshchat_analytics --logs --cache
+npm run db:init
+npm run sync -- --mode=backfill \
+  --since=2026-09-01T00:00:00.000Z \
+  --until=2026-09-06T00:00:00.000Z
+```

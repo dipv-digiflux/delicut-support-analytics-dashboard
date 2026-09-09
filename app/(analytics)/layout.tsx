@@ -1,15 +1,10 @@
-import Link from "next/link";
+import Image from "next/image";
 import { Suspense } from "react";
+import { SidebarNav } from "@/components/SidebarNav";
 import { SyncStatusBadge } from "@/components/SyncStatusBadge";
 import { TimezoneSwitcher } from "@/components/TimezoneSwitcher";
 import { getConfig } from "@/lib/config";
-import { resolveTimeZone, timezoneLabel } from "@/lib/timezone";
-
-const nav = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/conversations", label: "Conversations" },
-  { href: "/users", label: "Users" },
-];
+import { resolveTimeZone } from "@/lib/timezone";
 
 export default function AnalyticsLayout({
   children,
@@ -17,41 +12,37 @@ export default function AnalyticsLayout({
   children: React.ReactNode;
 }) {
   const cfg = getConfig();
-  const brand = cfg.APP_BRAND_NAME;
-  const product = cfg.APP_PRODUCT_NAME;
   const defaultTz = resolveTimeZone(cfg.REPORTING_TIMEZONE);
+  const year = new Date().getFullYear();
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--card)] px-4 py-6">
-        <div className="mb-8 px-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
-            {product}
-          </div>
-          <div className="mt-1 text-xl font-bold tracking-tight text-[var(--brand-800)]">
-            {brand}
-          </div>
+    <div className="flex min-h-screen bg-[var(--background)]">
+      <aside className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--sidebar)]">
+        <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-4">
+          <Image
+            src="/logo.png"
+            alt="Delicut"
+            width={140}
+            height={40}
+            className="h-8 w-auto object-contain"
+            priority
+          />
         </div>
-        <nav className="flex flex-col gap-1 text-sm">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-lg px-3 py-2 text-[var(--foreground)] transition hover:bg-[var(--brand-50)] hover:text-[var(--brand-800)]"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="mt-auto space-y-1 px-2 pt-6 text-xs text-[var(--muted)]">
-          <div>Freshchat extract · Local Mongo</div>
-          <div>Default TZ: {timezoneLabel(defaultTz)}</div>
+
+        <SidebarNav />
+
+        <div className="border-t border-[var(--border)] px-4 py-3 text-[10px] text-[var(--muted)]">
+          © {year}. Delicut All rights reserved.
         </div>
       </aside>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[var(--border)] bg-white/90 px-6 py-3 backdrop-blur">
-          <div className="text-sm font-medium text-[var(--foreground)]">
-            {brand} {product}
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-[var(--border)] bg-white px-6 py-3">
+          <div className="text-sm font-semibold text-[var(--brand-ink)]">
+            {cfg.APP_BRAND_NAME}{" "}
+            <span className="font-normal text-[var(--muted)]">
+              {cfg.APP_PRODUCT_NAME}
+            </span>
           </div>
           <div className="flex items-center gap-4">
             <Suspense fallback={null}>
@@ -60,7 +51,7 @@ export default function AnalyticsLayout({
             <SyncStatusBadge />
           </div>
         </header>
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main className="flex-1 px-6 py-5">{children}</main>
       </div>
     </div>
   );
