@@ -84,7 +84,8 @@ function planMonthlyOrSlice(
   while (cursor < until) {
     const next = addUtcDays(cursor, maxSpanDays);
     const windowEnd = minDate(next, until);
-    const isHot = windowEnd.getTime() >= startOfUtcDay(now).getTime();
+    // Hot only if the slice extends into the current UTC day (not merely touching midnight)
+    const isHot = windowEnd.getTime() > startOfUtcDay(now).getTime();
     const end = isHot ? minDate(windowEnd, now) : windowEnd;
     if (cursor < end) {
       const idEnd = isHot
@@ -128,8 +129,11 @@ export function applyOverlap(from: Date, event: ExtractEvent): Date {
 export function needsFetch(window: SyncWindow, force = false): boolean {
   if (force) return true;
   if (window.is_hot) return true;
-  if (window.status === "failed") return true;
   if (window.status === "submitted" || window.status === "ready") return true;
   if (window.status === "planned") return true;
+  if (window.status === "failed") {
+    // Caller should also check SYNC_WINDOW_MAX_ATTEMPTS via ledger filters
+    return true;
+  }
   return false; // merged / skipped
 }

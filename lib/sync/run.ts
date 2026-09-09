@@ -12,7 +12,13 @@ import {
   applyOverlap,
 } from "./planner";
 import { ensureCursor, advanceCursor } from "./cursor";
-import { upsertPlannedWindows, selectWorkWindows } from "./ledger";
+import {
+  upsertPlannedWindows,
+  selectWorkWindows,
+  countPendingWindows,
+  requeueRetryableFailures,
+  type WorkOrder,
+} from "./ledger";
 import { processWindow } from "./fetcher";
 import { enrichUsers } from "./enrich-users";
 import { classifyPending } from "./classify-phase";
@@ -26,9 +32,16 @@ export interface SyncOptions {
   dryRun?: boolean;
   force?: boolean;
   events?: ExtractEvent[];
+  /** Window fetch order. Default asc (oldest first). Campaigns use desc. */
+  order?: WorkOrder;
 }
 
-export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
+export interface SyncRunResult extends SyncRun {
+  /** True when Extract daily quota stopped further posts this run. */
+  quota_stopped: boolean;
+}
+
+export async function runSync(options: SyncOptions = {}): Promise<SyncRunResult> {
   const cfg = requireFreshchatConfig();
   const runId = ulid();
   const logger = createLogger(runId);
@@ -48,8 +61,11 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
   const dryRun = options.dryRun ?? false;
   const force = options.force ?? false;
   const events = options.events ?? cfg.syncEvents;
+  const workOrder: WorkOrder = options.order ?? "asc";
   const now = new Date();
   const until = options.until ?? now;
+  const sinceParam = options.since ?? null;
+  let quotaStopped = false;
 
   const { syncRuns } = await collections();
   await ensureIndexes(await getDb());
@@ -64,8 +80,9 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
       lookback_days: lookback,
       events,
       dry_run: dryRun,
-      since: options.since ?? null,
+      since: sinceParam,
       until,
+      order: workOrder,
     },
     counters: emptyCounters(),
     errors: [],
@@ -86,15 +103,29 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
 
   try {
     logger.info(
-      `start mode=${mode} lookback=${lookback}d dryRun=${dryRun} events=${events.join(",")}`,
+      `start mode=${mode} lookback=${lookback}d order=${workOrder} dryRun=${dryRun} events=${events.join(",")}`,
     );
+
+    if (!dryRun) {
+      const requeued = await requeueRetryableFailures({
+        events,
+        since: sinceParam,
+        until,
+        force,
+      });
+      if (requeued > 0) {
+        logger.info(
+          `re-queued ${requeued} failed window(s) for retry (attempts < ${cfg.SYNC_WINDOW_MAX_ATTEMPTS})`,
+        );
+      }
+    }
 
     // PLAN
     for (const event of events) {
       const cursor = await ensureCursor(event);
       let from: Date;
-      if (options.since) {
-        from = options.since;
+      if (sinceParam) {
+        from = sinceParam;
       } else if (mode === "backfill" || !cursor.last_successful_end) {
         from = addUtcDays(startOfUtcDay(now), -lookback);
       } else {
@@ -110,7 +141,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
     }
 
     // FETCH + MERGE (transcripts first, then labels, then csat)
-    const order: ExtractEvent[] = [
+    const eventOrder: ExtractEvent[] = [
       "Chat-Transcript",
       "Conversation-Created",
       "Conversation-Resolved",
@@ -122,21 +153,31 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
       "Message-Sent",
     ].filter((e) => events.includes(e as ExtractEvent)) as ExtractEvent[];
 
-    for (const event of order) {
+    for (const event of eventOrder) {
       if (signal.aborted) break;
 
       const quota = await remainingQuota(event);
-      const work = await selectWorkWindows(event, force, quota);
+      const work = await selectWorkWindows(event, force, quota, {
+        order: workOrder,
+        since: sinceParam,
+        until,
+      });
       logger.info(
-        `FETCH ${event}: ${work.length} windows to process (quota left ${quota})`,
+        `FETCH ${event}: ${work.length} windows to process (quota left ${quota}, order=${workOrder})`,
       );
 
-      for (const window of work) {
+      for (let i = 0; i < work.length; i++) {
+        const window = work[i]!;
         if (signal.aborted) break;
+        const day = window.window_start.toISOString().slice(0, 10);
+        logger.info(
+          `→ [${i + 1}/${work.length}] ${event} ${day} (${window.status}, attempts=${window.attempts || 0})`,
+        );
         try {
           await processWindow(window, run.counters, logger, signal, dryRun);
         } catch (err) {
           if (err instanceof FreshchatError && err.code === "QUOTA_EXHAUSTED") {
+            quotaStopped = true;
             logger.warn(`stopping ${event}: ${err.message}`);
             break;
           }
@@ -151,7 +192,82 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
         }
       }
 
-      if (!dryRun) await advanceCursor(event);
+      // In-run retry pass for failures (uses leftover quota)
+      if (
+        !dryRun &&
+        !signal.aborted &&
+        !quotaStopped &&
+        cfg.SYNC_RETRY_FAILED_IN_RUN
+      ) {
+        const retryQuota = await remainingQuota(event);
+        if (retryQuota > 0) {
+          const retries = await selectWorkWindows(event, force, retryQuota, {
+            order: workOrder,
+            since: sinceParam,
+            until,
+            failedOnly: true,
+          });
+          if (retries.length) {
+            logger.info(
+              `RETRY ${event}: ${retries.length} failed window(s) (quota left ${retryQuota})`,
+            );
+            for (let i = 0; i < retries.length; i++) {
+              const window = retries[i]!;
+              if (signal.aborted) break;
+              logger.info(
+                `↻ retry [${i + 1}/${retries.length}] ${event} ${window.window_start.toISOString().slice(0, 10)}`,
+              );
+              try {
+                await processWindow(
+                  window,
+                  run.counters,
+                  logger,
+                  signal,
+                  dryRun,
+                  true,
+                );
+              } catch (err) {
+                if (
+                  err instanceof FreshchatError &&
+                  err.code === "QUOTA_EXHAUSTED"
+                ) {
+                  quotaStopped = true;
+                  logger.warn(`stopping retry ${event}: ${err.message}`);
+                  break;
+                }
+                if (err instanceof FreshchatError && err.fatal) throw err;
+              }
+            }
+          }
+        }
+      }
+
+      // After processing, if we took fewer than available due to quota cap
+      if (!quotaStopped && quota === 0) {
+        const stillPending = await countPendingWindows([event], {
+          since: sinceParam,
+          until,
+          force,
+        });
+        if (stillPending > 0) quotaStopped = true;
+      } else if (!quotaStopped) {
+        const stillPending = await countPendingWindows([event], {
+          since: sinceParam,
+          until,
+          force,
+        });
+        if (stillPending > 0 && work.length >= quota && quota > 0) {
+          quotaStopped = true;
+          logger.warn(
+            `${event}: daily quota consumed with ${stillPending} window(s) still pending`,
+          );
+        }
+      }
+
+      // Cursor assumes contiguous oldest→newest prefix; skip in reverse/backfill
+      if (!dryRun && mode === "incremental" && workOrder === "asc") {
+        await advanceCursor(event);
+      }
     }
 
     if (!dryRun && !signal.aborted) {
@@ -161,11 +277,24 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
       await classifyPending(run.counters, logger);
     }
 
-    run.status = signal.aborted
-      ? "aborted"
-      : run.counters.windows_failed > 0
-        ? "partial"
-        : "completed";
+    const pendingLeft = await countPendingWindows(events, {
+      since: sinceParam,
+      until,
+      force,
+    });
+
+    if (signal.aborted) {
+      run.status = "aborted";
+    } else if (run.counters.windows_failed > 0 || pendingLeft > 0 || quotaStopped) {
+      run.status = "partial";
+      if (pendingLeft > 0) {
+        logger.warn(
+          `${pendingLeft} window(s) still pending in range — re-run to continue`,
+        );
+      }
+    } else {
+      run.status = "completed";
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`FATAL: ${message}`);
@@ -194,7 +323,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
 
     const elapsed = ((Date.now() - startedMs) / 1000).toFixed(1);
     logger.info(
-      `DONE in ${elapsed}s — status=${run.status} created:${run.counters.conversations_inserted} updated:${run.counters.conversations_updated} unchanged:${run.counters.conversations_unchanged} errors:${run.errors.length + run.counters.windows_failed}`,
+      `DONE in ${elapsed}s — status=${run.status} quota_stopped=${quotaStopped} created:${run.counters.conversations_inserted} updated:${run.counters.conversations_updated} unchanged:${run.counters.conversations_unchanged} errors:${run.errors.length + run.counters.windows_failed}`,
     );
     if (logger.getFilePaths().length) {
       logger.info(`log files: ${logger.getFilePaths().join(" | ")}`);
@@ -202,7 +331,7 @@ export async function runSync(options: SyncOptions = {}): Promise<SyncRun> {
     await logger.close();
   }
 
-  return run;
+  return { ...run, quota_stopped: quotaStopped };
 }
 
 export async function shutdownSync(): Promise<void> {

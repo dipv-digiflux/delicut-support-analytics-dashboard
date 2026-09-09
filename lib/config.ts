@@ -102,6 +102,17 @@ const ConfigSchema = z.object({
   EXTRACT_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(20000),
   EXTRACT_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(4500000),
   EXTRACT_CACHE_DIR: z.string().default(".cache/extracts"),
+  /** Max Extract attempts per window before giving up until --force */
+  SYNC_WINDOW_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  /** Within one run, immediately retry failed windows (uses remaining quota) */
+  SYNC_RETRY_FAILED_IN_RUN: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) =>
+      v === undefined || v === null || v === ""
+        ? true
+        : v === true || v === "true",
+    ),
 
   // --- HTTP client ---
   HTTP_MAX_RETRIES: z.coerce.number().int().nonnegative().default(5),

@@ -2,6 +2,24 @@
 
 import { useEffect, useState } from "react";
 
+type SyncPayload = {
+  state?: string;
+  lastCompletedAt?: string | null;
+  campaign?: {
+    id: string;
+    status: string;
+    pct: number;
+    merged: number;
+    total: number;
+    pending: number;
+    checkpoint?: {
+      next_window_start?: string | null;
+      pending_transcript_days?: number;
+    } | null;
+  } | null;
+  quota?: { remaining: number; maxPerDay: number } | null;
+};
+
 export function SyncStatusBadge() {
   const [label, setLabel] = useState("Checking sync…");
   const [tone, setTone] = useState("text-slate-500");
@@ -13,8 +31,37 @@ export function SyncStatusBadge() {
         const res = await fetch("/api/sync-status");
         const json = await res.json();
         if (cancelled) return;
-        const state = json.data?.state;
-        const at = json.data?.lastCompletedAt;
+        const data = json.data as SyncPayload | undefined;
+        const state = data?.state;
+        const at = data?.lastCompletedAt;
+        const camp = data?.campaign;
+
+        if (camp && camp.status !== "completed" && camp.total > 0) {
+          const pendingDays = camp.checkpoint?.pending_transcript_days;
+          const suffix =
+            typeof pendingDays === "number"
+              ? ` · ${pendingDays}d left`
+              : "";
+          if (camp.status === "paused_quota" || state === "paused_quota") {
+            setLabel(`Backfill ${camp.pct}% (${camp.merged}/${camp.total})${suffix} — resume tomorrow`);
+            setTone("text-amber-600");
+            return;
+          }
+          if (state === "running") {
+            setLabel(`Backfill ${camp.pct}% running…`);
+            setTone("text-blue-600");
+            return;
+          }
+          if (camp.status === "failed") {
+            setLabel(`Backfill failed · ${camp.pct}%`);
+            setTone("text-red-600");
+            return;
+          }
+          setLabel(`Backfill ${camp.pct}% (${camp.merged}/${camp.total})${suffix}`);
+          setTone("text-amber-600");
+          return;
+        }
+
         if (state === "never_run") {
           setLabel("Never synced");
           setTone("text-amber-600");
@@ -24,8 +71,12 @@ export function SyncStatusBadge() {
         } else if (state === "failed") {
           setLabel("Last sync failed");
           setTone("text-red-600");
-        } else if (state === "partial") {
-          setLabel("Last sync partial");
+        } else if (state === "partial" || state === "paused_quota") {
+          setLabel(
+            state === "paused_quota"
+              ? "Quota pause — resume tomorrow"
+              : "Last sync partial",
+          );
           setTone("text-amber-600");
         } else if (at) {
           const mins = Math.round(

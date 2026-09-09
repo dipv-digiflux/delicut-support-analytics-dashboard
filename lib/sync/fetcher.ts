@@ -32,6 +32,7 @@ export async function processWindow(
   logger: Logger,
   signal: { aborted: boolean },
   dryRun: boolean,
+  forceRetry = false,
 ): Promise<DiscoveredActor[]> {
   const discovered: DiscoveredActor[] = [];
 
@@ -42,6 +43,18 @@ export async function processWindow(
 
   try {
     let jobId = window.freshchat_job_id;
+    const cfg = getConfig();
+
+    if (
+      !forceRetry &&
+      window.status === "failed" &&
+      (window.attempts || 0) >= cfg.SYNC_WINDOW_MAX_ATTEMPTS
+    ) {
+      logger.warn(
+        `skip ${window._id}: exhausted ${window.attempts}/${cfg.SYNC_WINDOW_MAX_ATTEMPTS} attempts`,
+      );
+      return discovered;
+    }
 
     if (window.status === "planned" || window.status === "failed" || !jobId) {
       const job = await submitExtractJob(
@@ -63,6 +76,7 @@ export async function processWindow(
         attempts: (window.attempts || 0) + 1,
         last_error: null,
       });
+      window.attempts = (window.attempts || 0) + 1;
     }
 
     if (signal.aborted) throw new FreshchatError("Aborted", "ABORTED");

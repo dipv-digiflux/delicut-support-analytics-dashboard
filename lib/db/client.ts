@@ -7,6 +7,7 @@ import type {
   SyncCursor,
   ExtractBudget,
   SyncRun,
+  SyncCampaign,
 } from "./types";
 
 declare global {
@@ -55,6 +56,7 @@ export async function collections() {
     syncWindows: db.collection<SyncWindow>("sync_windows"),
     syncState: db.collection<SyncCursor | ExtractBudget>("sync_state"),
     syncRuns: db.collection<SyncRun>("sync_runs"),
+    syncCampaigns: db.collection<SyncCampaign>("sync_campaigns"),
   };
 }
 

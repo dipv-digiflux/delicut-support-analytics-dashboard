@@ -227,11 +227,55 @@ export interface SyncRun {
     dry_run: boolean;
     since: Date | null;
     until: Date | null;
+    order?: "asc" | "desc";
   };
   counters: SyncRunCounters;
   errors: { code: string; message: string; context: string; at: Date }[];
   host: string;
   git_sha: string | null;
+}
+
+export type SyncCampaignStatus =
+  | "running"
+  | "paused_quota"
+  | "completed"
+  | "failed";
+
+export interface SyncCampaignEventStats {
+  total: number;
+  merged: number;
+  failed: number;
+  pending: number;
+}
+
+export interface SyncCampaignStats extends SyncCampaignEventStats {
+  by_event: Partial<Record<ExtractEvent, SyncCampaignEventStats>>;
+}
+
+/** Resume pointer — re-runs skip merged windows and continue from pending. */
+export interface SyncCampaignCheckpoint {
+  /** Next window_start that still needs fetch (null if none). */
+  next_window_start: Date | null;
+  /** Newest merged Chat-Transcript day in campaign range. */
+  newest_merged_start: Date | null;
+  /** Oldest pending Chat-Transcript day still to fetch. */
+  oldest_pending_start: Date | null;
+  pending_transcript_days: number;
+}
+
+export interface SyncCampaign {
+  _id: string;
+  since: Date;
+  until: Date;
+  order: "asc" | "desc";
+  events: ExtractEvent[];
+  status: SyncCampaignStatus;
+  stats: SyncCampaignStats;
+  checkpoint: SyncCampaignCheckpoint;
+  last_run_id: string | null;
+  quota_stopped: boolean;
+  updated_at: Date;
+  created_at: Date;
 }
 
 export function emptyCounters(): SyncRunCounters {

@@ -22,6 +22,7 @@ async function main() {
   const until = arg("until");
   const mode = (arg("mode") as "backfill" | "incremental" | "repair") || undefined;
   const eventsRaw = arg("events");
+  const order = arg("order") as "asc" | "desc" | undefined;
 
   const run = await runSync({
     mode,
@@ -30,6 +31,7 @@ async function main() {
     until: until ? new Date(until) : null,
     dryRun: hasFlag("dry-run"),
     force: hasFlag("force"),
+    order,
     events: eventsRaw
       ? (eventsRaw.split(",") as ExtractEvent[])
       : undefined,

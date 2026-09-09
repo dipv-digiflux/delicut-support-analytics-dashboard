@@ -6,6 +6,12 @@ import {
   type ConversationFilters,
 } from "@/lib/filters";
 import { resolveSearchUserIds } from "@/lib/search";
+import {
+  campaignPct,
+  getLatestActiveCampaign,
+  getLatestCampaign,
+} from "@/lib/sync/campaign";
+import { remainingQuota } from "@/lib/freshchat/budget";
 
 function avg(nums: number[]): number | null {
   if (!nums.length) return null;
@@ -1040,8 +1046,35 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
 
 export async function getSyncStatus() {
   const { syncRuns, conversations } = await collections();
+  const cfg = getConfig();
   const latest = await syncRuns.find({}).sort({ started_at: -1 }).limit(1).next();
   const count = await conversations.estimatedDocumentCount();
+  const active =
+    (await getLatestActiveCampaign()) || (await getLatestCampaign());
+  const transcriptQuotaLeft = await remainingQuota("Chat-Transcript");
+
+  const campaign = active
+    ? {
+        id: active._id,
+        status: active.status,
+        pct: campaignPct(active.stats),
+        merged: active.stats.merged,
+        total: active.stats.total,
+        pending: active.stats.pending,
+        failed: active.stats.failed,
+        order: active.order,
+        since: active.since,
+        until: active.until,
+        checkpoint: active.checkpoint ?? null,
+        quotaStopped: active.quota_stopped,
+      }
+    : null;
+
+  const quota = {
+    event: "Chat-Transcript" as const,
+    remaining: transcriptQuotaLeft,
+    maxPerDay: cfg.EXTRACT_MAX_JOBS_PER_DAY,
+  };
 
   if (!latest) {
     return {
@@ -1051,22 +1084,38 @@ export async function getSyncStatus() {
       conversationsProcessed: count,
       failedRecords: 0,
       counters: null,
+      campaign,
+      quota,
     };
   }
 
+  let state:
+    | "never_run"
+    | "running"
+    | "failed"
+    | "partial"
+    | "idle"
+    | "paused_quota" =
+    latest.status === "running"
+      ? "running"
+      : latest.status === "failed"
+        ? "failed"
+        : latest.status === "partial"
+          ? "partial"
+          : "idle";
+
+  if (state !== "running" && campaign?.status === "paused_quota") {
+    state = "paused_quota";
+  }
+
   return {
-    state:
-      latest.status === "running"
-        ? ("running" as const)
-        : latest.status === "failed"
-          ? ("failed" as const)
-          : latest.status === "partial"
-            ? ("partial" as const)
-            : ("idle" as const),
+    state,
     lastStartedAt: latest.started_at,
     lastCompletedAt: latest.finished_at,
     conversationsProcessed: count,
     failedRecords: latest.counters.windows_failed + latest.errors.length,
     counters: latest.counters,
+    campaign,
+    quota,
   };
 }

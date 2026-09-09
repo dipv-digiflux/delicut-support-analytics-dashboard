@@ -11,7 +11,9 @@ async function main() {
   console.log(
     `[init-db] ready — collections: ${cols.map((c) => c.name).join(", ") || "(empty, indexes created on first write)"}`,
   );
-  console.log("[init-db] indexes ensured on conversations, users, sync_windows, sync_runs");
+  console.log(
+    "[init-db] indexes ensured on conversations, users, sync_windows, sync_runs, sync_campaigns, sync_state",
+  );
 }
 
 main()
