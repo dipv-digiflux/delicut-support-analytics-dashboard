@@ -25,6 +25,8 @@ export async function upsertDiscoveredUsers(
             role: d.role,
             updated_at: now,
           },
+          // Use dotted paths only — Mongo rejects $max("stats.x") + $setOnInsert(stats:{...}) together
+          $min: { "stats.first_seen_at": d.last_seen_at },
           $max: { "stats.last_seen_at": d.last_seen_at },
           $setOnInsert: {
             first_name: d.name?.split(" ")[0] || null,
@@ -40,11 +42,7 @@ export async function upsertDiscoveredUsers(
               attempts: 0,
               last_error: null,
             },
-            stats: {
-              first_seen_at: d.last_seen_at,
-              last_seen_at: d.last_seen_at,
-              conversation_count: 0,
-            },
+            "stats.conversation_count": 0,
           },
         },
         upsert: true,

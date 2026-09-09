@@ -2,9 +2,14 @@ import { runSync, shutdownSync } from "@/lib/sync/run";
 import type { ExtractEvent } from "@/lib/db/types";
 
 function arg(name: string): string | undefined {
+  const eqPrefix = `--${name}=`;
+  const eq = process.argv.find((a) => a.startsWith(eqPrefix));
+  if (eq) return eq.slice(eqPrefix.length);
   const idx = process.argv.indexOf(`--${name}`);
   if (idx === -1) return undefined;
-  return process.argv[idx + 1];
+  const next = process.argv[idx + 1];
+  if (!next || next.startsWith("--")) return undefined;
+  return next;
 }
 
 function hasFlag(name: string): boolean {

@@ -4,6 +4,7 @@ import { FreshchatError } from "./errors";
 import type { ExtractEvent } from "@/lib/db/types";
 import type { Logger } from "@/lib/log/logger";
 import { getConfig } from "@/lib/config";
+import { unwrapExtractCsv } from "@/lib/parse/extract-buffer";
 
 export interface SubmitJobResult {
   id: string;
@@ -144,7 +145,7 @@ export async function downloadExtractCsv(
     repoll?: () => Promise<PollJobResult>;
   } = {},
 ): Promise<Buffer> {
-  const parts: Buffer[] = [];
+  const csvTexts: string[] = [];
 
   for (const link of links) {
     try {
@@ -153,7 +154,9 @@ export async function downloadExtractCsv(
         onApiCall: opts.onApiCall,
         onRateLimit: opts.onRateLimit,
       });
-      parts.push(buf);
+      // Freshchat often serves a ZIP that wraps the CSV
+      const csv = unwrapExtractCsv(buf).toString("utf8");
+      csvTexts.push(csv);
     } catch (err) {
       if (
         err instanceof FreshchatError &&
@@ -171,5 +174,15 @@ export async function downloadExtractCsv(
     }
   }
 
-  return Buffer.concat(parts);
+  if (csvTexts.length <= 1) {
+    return Buffer.from(csvTexts[0] || "", "utf8");
+  }
+
+  const merged: string[] = [];
+  for (let i = 0; i < csvTexts.length; i++) {
+    const lines = csvTexts[i].replace(/^\uFEFF/, "").split(/\r?\n/);
+    if (i === 0) merged.push(...lines);
+    else merged.push(...lines.slice(1));
+  }
+  return Buffer.from(merged.join("\n"), "utf8");
 }

@@ -25,7 +25,12 @@ const boolish = z
   .default(false);
 
 const ConfigSchema = z.object({
-  FRESHCHAT_API_BASE: z.string().optional().default(""),
+  FRESHCHAT_API_BASE: z
+    .string()
+    .optional()
+    .default("")
+    // Freshchat rejects http:// with 401; always prefer https
+    .transform((v) => v.replace(/^http:\/\//i, "https://")),
   FRESHCHAT_API_TOKEN: z.string().optional().default(""),
   MONGODB_URI: z.string().default("mongodb://127.0.0.1:27017"),
   MONGODB_DB: z.string().default("freshchat_analytics"),
