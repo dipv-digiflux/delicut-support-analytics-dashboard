@@ -9,7 +9,7 @@ import {
   type ColumnDef,
 } from "@/components/ui/ColumnPicker";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { SEARCH_COVERS, SEARCH_PLACEHOLDER } from "@/lib/search";
+import { SEARCH_COVERS, SEARCH_PLACEHOLDER } from "@/lib/search-labels";
 
 const FILTER_STORAGE = "delicut.filters.visible.v1";
 

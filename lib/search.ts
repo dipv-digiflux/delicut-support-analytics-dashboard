@@ -1,11 +1,5 @@
 import { collections } from "@/lib/db/client";
 
-/** Shown in the FilterBar Search field — keep in sync with match logic. */
-export const SEARCH_COVERS =
-  "conversation ID, customer name / phone / email / reference, agent, channel, group, label, and message text";
-
-export const SEARCH_PLACEHOLDER = "name, phone, email, ID, label…";
-
 /** Escape a string for use inside a Mongo `$regex`. */
 export function escapeRegex(q: string): string {
   return q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -39,3 +33,5 @@ export async function resolveSearchUserIds(q: string): Promise<string[]> {
 
   return rows.map((u) => String(u._id));
 }
+
+export { SEARCH_COVERS, SEARCH_PLACEHOLDER } from "@/lib/search-labels";

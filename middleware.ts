@@ -17,8 +17,10 @@ export const config = {
 
 function envBag() {
   return {
-    DASHBOARD_ADMIN_PASSWORD: process.env.DASHBOARD_ADMIN_PASSWORD,
-    DASHBOARD_ADMIN_USER: process.env.DASHBOARD_ADMIN_USER,
+    // Match lib/config defaults so middleware and server agree when env is unset
+    DASHBOARD_ADMIN_PASSWORD:
+      process.env.DASHBOARD_ADMIN_PASSWORD ?? "admin",
+    DASHBOARD_ADMIN_USER: process.env.DASHBOARD_ADMIN_USER ?? "admin",
     DASHBOARD_SESSION_SECRET: process.env.DASHBOARD_SESSION_SECRET,
     DASHBOARD_API_SECRET: process.env.DASHBOARD_API_SECRET,
   };
