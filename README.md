@@ -48,6 +48,7 @@ npm run dev
 
 | Command | Purpose |
 |---------|---------|
+| `npm run db:backup` | Full Mongo dump (`mongodump` → `backups/`) |
 | `npm run sync:year` | Backfill from Jan 1 of current year |
 | `npm run sync -- --lookback=3` | Short test sync |
 | `npm run sync -- --since=2026-01-01` | Custom since date |
