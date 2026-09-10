@@ -13,6 +13,18 @@ import {
 } from "@/lib/sync/campaign";
 import { remainingQuota } from "@/lib/freshchat/budget";
 
+/** Mongo: `$csat.rating` is "missing" when parent `csat` is null — `$ne null` is wrongly true. */
+const HAS_CSAT_RATING = {
+  $in: [{ $type: "$csat.rating" }, ["double", "int", "long", "decimal"]],
+} as const;
+
+const HAS_RESOLUTION_LABEL = {
+  $and: [
+    { $eq: [{ $type: "$resolution.label" }, "string"] },
+    { $ne: ["$resolution.label", ""] },
+  ],
+} as const;
+
 function avg(nums: number[]): number | null {
   if (!nums.length) return null;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
@@ -48,32 +60,31 @@ export async function getKpis(filters: ConversationFilters) {
           },
           ratedCount: {
             $sum: {
-              $cond: [{ $ne: ["$csat.rating", null] }, 1, 0],
+              $cond: [HAS_CSAT_RATING, 1, 0],
             },
           },
           csatSum: { $sum: { $ifNull: ["$csat.rating", 0] } },
           satisfiedCount: {
             $sum: {
-              $cond: [{ $gte: ["$csat.rating", 4] }, 1, 0],
+              $cond: [
+                { $and: [HAS_CSAT_RATING, { $gte: ["$csat.rating", 4] }] },
+                1,
+                0,
+              ],
             },
           },
           dissatisfiedCount: {
             $sum: {
-              $cond: [{ $lte: ["$csat.rating", 2] }, 1, 0],
+              $cond: [
+                { $and: [HAS_CSAT_RATING, { $lte: ["$csat.rating", 2] }] },
+                1,
+                0,
+              ],
             },
           },
           labeledCount: {
             $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ["$resolution.label", null] },
-                    { $ne: ["$resolution.label", ""] },
-                  ],
-                },
-                1,
-                0,
-              ],
+              $cond: [HAS_RESOLUTION_LABEL, 1, 0],
             },
           },
           messageSum: { $sum: { $ifNull: ["$message_count", 0] } },
@@ -639,11 +650,17 @@ async function dimensionBreakdown(
             $sum: { $cond: [{ $eq: ["$reopened", true] }, 1, 0] },
           },
           rated: {
-            $sum: { $cond: [{ $ne: ["$csat.rating", null] }, 1, 0] },
+            $sum: { $cond: [HAS_CSAT_RATING, 1, 0] },
           },
           csatSum: { $sum: { $ifNull: ["$csat.rating", 0] } },
           satisfied: {
-            $sum: { $cond: [{ $gte: ["$csat.rating", 4] }, 1, 0] },
+            $sum: {
+              $cond: [
+                { $and: [HAS_CSAT_RATING, { $gte: ["$csat.rating", 4] }] },
+                1,
+                0,
+              ],
+            },
           },
           messages: { $sum: { $ifNull: ["$message_count", 0] } },
           frtSum: {
