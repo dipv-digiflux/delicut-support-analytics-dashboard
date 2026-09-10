@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { SearchableMultiSelect } from "@/components/filters/SearchableMultiSelect";
 import {
   ColumnPicker,
@@ -179,24 +180,18 @@ export function FilterBar({
       {open && (
         <div className="flex flex-wrap items-end gap-3 border-t border-[var(--border)] px-4 py-3">
           {show("dates") && (
-            <>
-              <Field label="From">
-                <input
-                  type="date"
-                  className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-                  defaultValue={sp.get("from") || ""}
-                  onChange={(e) => update("from", e.target.value)}
-                />
-              </Field>
-              <Field label="To">
-                <input
-                  type="date"
-                  className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
-                  defaultValue={sp.get("to") || ""}
-                  onChange={(e) => update("to", e.target.value)}
-                />
-              </Field>
-            </>
+            <DateRangePicker
+              from={sp.get("from") || ""}
+              to={sp.get("to") || ""}
+              onChange={({ from, to }) => {
+                push((next) => {
+                  if (from) next.set("from", from);
+                  else next.delete("from");
+                  if (to) next.set("to", to);
+                  else next.delete("to");
+                });
+              }}
+            />
           )}
 
           {show("responders") && (
