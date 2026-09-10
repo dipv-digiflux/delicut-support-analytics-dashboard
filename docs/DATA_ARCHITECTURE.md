@@ -2,7 +2,7 @@
 
 This app is a **read-mostly analytics warehouse**: Freshchat is the source of truth, MongoDB is the local store, and the Next.js dashboard only reads Mongo. We do not invent CSAT, labels, or SLA times.
 
-Related: [SYNC.md](./SYNC.md) (ops / resume) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) (KPI formulas) · [ENV.md](./ENV.md) (credentials)
+Related: [DATA_FLOW.md](./DATA_FLOW.md) (Freshchat → us + webhooks) · [SYNC.md](./SYNC.md) (ops / resume) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) (KPI formulas) · [ENV.md](./ENV.md) (credentials)
 
 ---
 

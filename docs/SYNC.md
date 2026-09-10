@@ -1,6 +1,7 @@
 # Sync design (summary)
 
-How data is fetched, what is stored, and the warehouse layout: [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md).
+How data is fetched, what is stored, and the warehouse layout: [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md).  
+End-to-end Freshchat → us (and webhook vs Extract): [DATA_FLOW.md](./DATA_FLOW.md).
 
 Standalone script: `npm run sync` → `scripts/sync.ts` → `lib/sync/run.ts`.
 
