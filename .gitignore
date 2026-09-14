@@ -3,6 +3,7 @@
 node_modules/
 .cache/
 backups/
+exports/
 logs/**
 !logs/.gitkeep
 .env

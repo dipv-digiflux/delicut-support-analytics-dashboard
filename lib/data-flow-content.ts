@@ -132,9 +132,9 @@ export const UI_SURFACES = [
     reads: "One CSV row per conversation (all metadata, no message bodies)",
   },
   {
-    name: "Export messages (raw)",
-    path: "/api/conversations/export?kind=messages",
-    reads: "One CSV row per message including every Freshchat CSV column in raw.* plus raw_json",
+    name: "Excel dump (CLI)",
+    path: "npm run export:xlsx",
+    reads: "Workbook tabs: Info, Conversations, Messages, CSAT, Labels, Users, and All (one row per message with every field + raw CSV columns)",
   },
 ];
 
