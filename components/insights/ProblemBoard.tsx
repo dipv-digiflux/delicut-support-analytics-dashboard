@@ -43,9 +43,9 @@ export function ProblemBoard({
               <p className="text-xs text-slate-600">{card.why}</p>
               {card.quotes.length > 0 && (
                 <ul className="mt-2 space-y-1">
-                  {card.quotes.map((q) => (
+                  {card.quotes.map((q, qi) => (
                     <li
-                      key={q}
+                      key={`${card.key}-${qi}`}
                       className="border-l-2 border-[var(--border)] pl-2 text-xs leading-snug text-slate-700"
                     >
                       “{q}”
