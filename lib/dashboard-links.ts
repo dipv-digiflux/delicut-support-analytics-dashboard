@@ -1,6 +1,20 @@
 import type { ConversationFilters } from "@/lib/filters";
 import { filtersToQuery } from "@/lib/filters";
 
+/** Map chart/table subject labels to the FilterBar `subject` query value. */
+export function subjectFilterValue(subject: string | null | undefined): string {
+  const s = (subject || "").trim();
+  if (
+    !s ||
+    s === "(no Freshchat label)" ||
+    s === "unlabeled" ||
+    s === "unclassified"
+  ) {
+    return "unlabeled";
+  }
+  return s;
+}
+
 /** Build `/conversations?...` from current dashboard filters + a dimension patch. */
 export function conversationsHref(
   filters: ConversationFilters,

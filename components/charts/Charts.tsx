@@ -18,7 +18,10 @@ import {
 } from "chart.js";
 import { Line, Doughnut, Bar } from "react-chartjs-2";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { conversationsHrefFromQuery } from "@/lib/dashboard-links";
+import {
+  conversationsHrefFromQuery,
+  subjectFilterValue,
+} from "@/lib/dashboard-links";
 
 ChartJS.register(
   CategoryScale,
@@ -228,7 +231,7 @@ export function SubjectBarChart({
             onClick: (e, els) =>
               clickIndex(e, els, (i) => {
                 const subject = data[i]?.subject || data[i]?.label;
-                if (subject) go({ subject });
+                if (subject) go({ subject: subjectFilterValue(subject) });
               }),
             onHover: (event, elements) => {
               const canvas = event.native?.target as HTMLElement | undefined;
@@ -813,7 +816,11 @@ export function LabelTrendChart({
                 const ds = els[0]?.datasetIndex ?? 0;
                 const label = data.series[ds]?.label;
                 if (day && label)
-                  go({ from: day, to: day, subject: label });
+                  go({
+                    from: day,
+                    to: day,
+                    subject: subjectFilterValue(label),
+                  });
               }),
             onHover: (event, elements) => {
               const canvas = event.native?.target as HTMLElement | undefined;

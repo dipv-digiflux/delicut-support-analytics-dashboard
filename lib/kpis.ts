@@ -102,11 +102,70 @@ async function matchFor(filters: ConversationFilters) {
   return buildConversationMatch(filters, searchUserIds);
 }
 
+const UNLABELED_SUBJECT = {
+  $or: [
+    { $eq: ["$derived.subject", null] },
+    { $eq: ["$derived.subject", ""] },
+  ],
+} as const;
+
+function voiceFacetBranches() {
+  const subjectId = {
+    $cond: [UNLABELED_SUBJECT, "unlabeled", "$derived.subject"],
+  };
+  return {
+    recentOpeners: [
+      { $match: { preview_text: { $type: "string" as const, $ne: "" } } },
+      { $limit: 400 },
+      {
+        $project: {
+          text: "$preview_text",
+          subject: subjectId,
+          resolved: 1,
+        },
+      },
+    ],
+    csatQuotes: [
+      { $match: { "csat.comment": { $type: "string" as const, $ne: "" } } },
+      { $limit: 20 },
+      {
+        $project: {
+          comment: "$csat.comment",
+          rating: "$csat.rating",
+          subject: subjectId,
+        },
+      },
+    ],
+    subjectSamples: [
+      { $match: { preview_text: { $type: "string" as const, $ne: "" } } },
+      {
+        $group: {
+          _id: subjectId,
+          count: { $sum: 1 },
+          samples: {
+            $topN: {
+              n: 3,
+              sortBy: { created_at: -1 as const },
+              output: "$preview_text",
+            },
+          },
+        },
+      },
+      { $sort: { count: -1 as const } },
+      { $limit: 8 },
+    ],
+  };
+}
+
 /** One $match + $project + $facet so year-range dashboards scan conversations once. */
-export async function getKpis(filters: ConversationFilters) {
+export async function getKpis(
+  filters: ConversationFilters,
+  opts: { voice?: boolean } = {},
+) {
   const { conversations } = await collections();
   const match = await matchFor(filters);
   const tz = filters.timeZone || "Asia/Dubai";
+  const voiceBranches = opts.voice ? voiceFacetBranches() : {};
 
   const [facet] = await conversations
     .aggregate(
@@ -194,6 +253,36 @@ export async function getKpis(filters: ConversationFilters) {
                   systemActors: {
                     $sum: { $ifNull: ["$actor_counts.system", 0] },
                   },
+                  botOnlyCount: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            {
+                              $gt: [{ $ifNull: ["$actor_counts.bot", 0] }, 0],
+                            },
+                            {
+                              $eq: [
+                                { $ifNull: ["$actor_counts.agent", 0] },
+                                0,
+                              ],
+                            },
+                          ],
+                        },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
+                  botInvolvedCount: {
+                    $sum: {
+                      $cond: [
+                        { $gt: [{ $ifNull: ["$actor_counts.bot", 0] }, 0] },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
                 },
               },
             ],
@@ -247,27 +336,32 @@ export async function getKpis(filters: ConversationFilters) {
               { $group: { _id: "$csat.rating", count: { $sum: 1 } } },
               { $sort: { _id: 1 } },
             ],
-            bySubject: [
-              {
-                $group: {
-                  _id: {
-                    $cond: [
-                      {
-                        $or: [
-                          { $eq: ["$derived.subject", null] },
-                          { $eq: ["$derived.subject", ""] },
-                        ],
-                      },
-                      "(no Freshchat label)",
-                      "$derived.subject",
+            subjectDeep: dimPipeline({
+              id: {
+                $cond: [
+                  {
+                    $or: [
+                      { $eq: ["$derived.subject", null] },
+                      { $eq: ["$derived.subject", ""] },
                     ],
                   },
-                  count: { $sum: 1 },
-                },
+                  "unlabeled",
+                  "$derived.subject",
+                ],
               },
-              { $sort: { count: -1 } },
-              { $limit: 15 },
-            ],
+              name: {
+                $cond: [
+                  {
+                    $or: [
+                      { $eq: ["$derived.subject", null] },
+                      { $eq: ["$derived.subject", ""] },
+                    ],
+                  },
+                  "(no Freshchat label)",
+                  "$derived.subject",
+                ],
+              },
+            }),
             averageCsatByAgent: [
               { $match: { "csat.rating": { $ne: null } } },
               {
@@ -385,6 +479,7 @@ export async function getKpis(filters: ConversationFilters) {
               },
               { $sort: { "_id.day": 1 } },
             ],
+            ...voiceBranches,
           },
         },
       ],
@@ -401,6 +496,10 @@ export async function getKpis(filters: ConversationFilters) {
   const dissatisfiedCount = stats?.dissatisfiedCount || 0;
   const withAttachments = stats?.withAttachments || 0;
   const unassignedCount = stats?.unassignedCount || 0;
+  const labeledCount = stats?.labeledCount || 0;
+  const unlabeledCount = Math.max(0, total - labeledCount);
+  const botOnlyCount = stats?.botOnlyCount || 0;
+  const botInvolvedCount = stats?.botInvolvedCount || 0;
   const frtAvg =
     typeof stats?.frtAvg === "number" ? (stats.frtAvg as number) : null;
   const resAvg =
@@ -522,9 +621,9 @@ export async function getKpis(filters: ConversationFilters) {
   const channelDeep = mapDimRows(facet?.channelDeep || []);
   const agentDeep = mapDimRows(facet?.agentDeep || []);
   const groupDeep = mapDimRows(facet?.groupDeep || []);
+  const subjectDeep = mapDimRows(facet?.subjectDeep || []);
   const dailyCsat = facet?.dailyCsat || [];
   const csatDistribution = facet?.csatDistribution || [];
-  const bySubject = facet?.bySubject || [];
   const averageCsatByAgent = facet?.averageCsatByAgent || [];
   const csatByChannelRaw = facet?.csatByChannel || [];
 
@@ -541,7 +640,8 @@ export async function getKpis(filters: ConversationFilters) {
       csatResponseRate: total ? ratedCount / total : null,
       satisfiedRate: ratedCount ? stats.satisfiedCount / ratedCount : null,
       dissatisfiedRate: ratedCount ? dissatisfiedCount / ratedCount : null,
-      labelCoverage: total ? (stats?.labeledCount || 0) / total : null,
+      labelCoverage: total ? labeledCount / total : null,
+      unlabeledCount,
       avgMessages: total ? (stats?.messageSum || 0) / total : null,
       avgFirstResponseSeconds: frtAvg,
       medianFirstResponseSeconds: frtMedian,
@@ -554,6 +654,10 @@ export async function getKpis(filters: ConversationFilters) {
       agentCount: agentDeep.length,
       channelCount: channelDeep.length,
       groupCount: groupDeep.length,
+      botOnlyCount,
+      botOnlyRate: total ? botOnlyCount / total : null,
+      botInvolvedCount,
+      botInvolvedRate: total ? botInvolvedCount / total : null,
     },
     charts: {
       dailyVolume: dailyVolumeMerged,
@@ -568,10 +672,10 @@ export async function getKpis(filters: ConversationFilters) {
           csatDistribution.find((x: { _id: number }) => x._id === rating)?.count ||
           0,
       })),
-      bySubject: bySubject.map((s: { _id: string; count: number }) => ({
-        subject: s._id,
-        label: s._id,
-        count: s.count,
+      bySubject: subjectDeep.slice(0, 15).map((s) => ({
+        subject: s.id,
+        label: s.name,
+        count: s.conversations,
       })),
       byChannel: channelDeep.slice(0, 10).map((c) => ({
         channel: c.name,
@@ -621,6 +725,52 @@ export async function getKpis(filters: ConversationFilters) {
       byChannel: channelDeep,
       byAgent: agentDeep,
       byGroup: groupDeep,
+      bySubject: subjectDeep,
+    },
+    voice: {
+      sampled: (facet?.recentOpeners || []).length,
+      openers: (facet?.recentOpeners || []).map(
+        (r: {
+          _id?: unknown;
+          text?: string;
+          subject?: string;
+          resolved?: boolean;
+        }) => ({
+          id: String(r._id ?? ""),
+          text: String(r.text || "").trim(),
+          subject: String(r.subject || "unlabeled"),
+          resolved: r.resolved === true,
+        }),
+      ).filter((r: { text: string }) => r.text),
+      quotes: (facet?.csatQuotes || []).map(
+        (r: {
+          _id?: unknown;
+          comment?: string;
+          rating?: number | null;
+          subject?: string;
+        }) => ({
+          id: String(r._id ?? ""),
+          comment: String(r.comment || "").trim(),
+          rating: typeof r.rating === "number" ? r.rating : null,
+          subject: String(r.subject || "unlabeled"),
+        }),
+      ).filter((r: { comment: string }) => r.comment),
+      subjectSamples: (facet?.subjectSamples || []).map(
+        (r: { _id?: unknown; count?: number; samples?: unknown[] }) => ({
+          id: String(r._id || "unlabeled"),
+          name:
+            String(r._id || "") === "unlabeled"
+              ? "(no Freshchat label)"
+              : String(r._id || "Unknown"),
+          count: r.count || 0,
+          samples: (r.samples || [])
+            .map((s) => String(s || "").trim())
+            .filter(Boolean)
+            .slice(0, 3),
+        }),
+      ),
     },
   };
 }
+
+export type KpiResult = Awaited<ReturnType<typeof getKpis>>;

@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { conversationsHrefFromQuery } from "@/lib/dashboard-links";
+import {
+  conversationsHrefFromQuery,
+  subjectFilterValue,
+} from "@/lib/dashboard-links";
 
 function fmtPct(n: number | null | undefined) {
   if (n == null) return "—";
@@ -92,7 +95,7 @@ export function BreakdownTable({
   /** Current dashboard filters as query string (serializable). */
   baseQuery?: string;
   /** Build Conversations links for row names (serializable — no server→client functions). */
-  linkKind?: "channel" | "agent" | "group";
+  linkKind?: "channel" | "agent" | "group" | "subject";
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("conversations");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
@@ -124,7 +127,11 @@ export function BreakdownTable({
         agent: r.id || "unassigned",
       });
     }
-    // group
+    if (linkKind === "subject") {
+      return conversationsHrefFromQuery(baseQuery, {
+        subject: subjectFilterValue(r.id || r.name),
+      });
+    }
     return conversationsHrefFromQuery(baseQuery, {
       group: r.name === "No group" ? null : r.name,
     });

@@ -112,6 +112,16 @@ export const UI_SURFACES = [
     reads: "Aggregations on conversations (slim fields, no messages[])",
   },
   {
+    name: "Experience",
+    path: "/insights/cx",
+    reads: "Same getKpis() scan as Dashboard; subject-level resolution table + rule-based next steps",
+  },
+  {
+    name: "Demand",
+    path: "/insights/marketing",
+    reads: "Same getKpis() scan as Dashboard; demand mix, channel CSAT, rule-based next steps",
+  },
+  {
     name: "Conversations table",
     path: "/conversations",
     reads: "One row per chat; preview + counts. Raw button loads full Mongo doc including messages.",

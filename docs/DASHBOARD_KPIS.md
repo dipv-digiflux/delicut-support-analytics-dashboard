@@ -95,7 +95,9 @@ Changing filters recalculates **every** KPI, chart, and breakdown for the same m
 | **CSAT response rate** | rated count / total | Share of chats that got a score | 🟢 |
 | **Label coverage** | has non-empty resolution label / total | Freshchat labels only | 🟢 |
 | **Avg messages / chat** | `SUM(message_count) / total` | From transcript | 🟢 |
-| **Bot deflection rate** 🆕 | `bot-only` conversations / total | Chats fully handled without an agent | 📋 |
+| **Bot deflection rate** 🆕 | `bot-only` conversations / total | Chats fully handled without an agent | 🟢 derived (`actor_counts`: bot > 0 and agent = 0). Not Freshchat’s own deflection metric |
+| **Bot-involved rate** 🆕 | chats with `actor_counts.bot > 0` / total | Any bot message in the transcript | 🟢 derived |
+| **Unlabeled chats** 🆕 | total − labeled | Pairs with label coverage | 🟢 |
 | **Avg first response** | `AVG(metrics.first_response_time_seconds)` | Only chats with FRT from Extract | 🟢 |
 | **Median first response** 🆕 | `MEDIAN(metrics.first_response_time_seconds)` | Less skewed by outliers than avg | 🟢 |
 | **Avg resolution time** | `AVG(metrics.resolution_time_seconds)` | Only chats with resolution-time report | 🟢 |
@@ -175,7 +177,11 @@ Each row is one **channel**, **agent**, or **group**. Same metric columns (row n
 
 ### 5.1–5.3 By channel / responder / group — 🟢 live
 
-### 5.4 By priority 🆕📋 / 5.5 By team ✅🆕📋 — planned (need priority field / Team-Performance-Report sync)
+### 5.4 By Freshchat label (subject) 🟢 live on `/insights/*` (and `GET /api/kpis`)
+
+Same dim columns as channel/agent. Unlabeled rows use id `unlabeled`.
+
+### 5.5 By priority 🆕📋 / 5.6 By team ✅🆕📋 — planned (need priority field / Team-Performance-Report sync)
 
 ---
 
@@ -186,7 +192,9 @@ Each row is one **channel**, **agent**, or **group**. Same metric columns (row n
 | **`/conversations` (Raw data)** | Flat table + CSV export; receives dashboard drill-down query | 🟢 |
 | **`/conversations/[id]`** | Full transcript + profile | 🟢 |
 | **`/users` / `/users/[id]`** | Customers + chat history | 🟢 |
-| **`/api/kpis`** | JSON for all KPIs + charts + breakdowns | 🟢 |
+| **`/insights/cx`** 🆕 | Experience: query mix, close-out speed, subject-level resolution, next-step cards | 🟢 |
+| **`/insights/marketing`** 🆕 | Demand: demand mix, channel CSAT, next-step cards | 🟢 |
+| **`/api/kpis`** | JSON for all KPIs + charts + breakdowns (includes `breakdowns.bySubject`, `botOnlyRate`) | 🟢 |
 | **`/api/sync-status`** | Last sync state / freshness | 🟢 |
 | **`/agents/live`** ✅🆕 | Instant Metrics live presence | 📋 |
 | **`/teams`** ✅🆕 | Team-Performance-Report cross-check | 📋 |
@@ -234,18 +242,22 @@ Remaining open items (see 📋 rows above), plus:
 | Who is overloaded? | Agent volume chart |
 | Export for Excel? | Conversations → Export CSV |
 | See the raw chats behind a number? | Click the KPI / chart / breakdown row 🟢 |
+| What are customers asking, and how do we close it? | **Experience** `/insights/cx` — subject table + next-step cards |
+| What’s hitting chat and how does it score? | **Demand** `/insights/marketing` — label mix, channel CSAT |
 
 ---
 
-## 10. Summary of changes in this update
+## 10. Leadership views (`/insights/cx`, `/insights/marketing`) 🟢
 
-**Round 1 (proposed, 🆕 only):** New KPIs/charts/filters for FCR, SLA, bot, priority, heatmaps, etc. — many still 📋 until data exists.
+Same `getKpis()` scan as `/dashboard` (one `$match` + `$project` + `$facet`). Same FilterBar. Persona is in the **path** so Clear/timezone keep the view.
 
-**Round 2 (✅ against Freshchat docs):** Assignment, agent activity, team report, Instant Metrics — confirmed real, still 📋 until synced for this account.
+- **Query type** = Freshchat resolution label (`derived.subject`). Unlabeled slug is `subject=unlabeled`.
+- **How queries resolve** = `breakdowns.bySubject` (volume, resolved %, reopen %, CSAT, FRT, resolve time) — same dim pipeline as channel/agent.
+- **Next steps** = threshold rules in `lib/insights/actions.ts` on already-fetched numbers. No LLM, no extra Mongo, no `messages[]`.
+- **Bot-only / bot-involved** = derived from denormalized `actor_counts`, not Extract deflection.
 
-**Round 3 (this codebase):**
-- Doc updated with status tags (🟢 / 📋).
-- Dashboard drill-down: KPI tiles, charts, and breakdown names navigate to `/conversations` with date range + dimension filters preserved.
-- Existing live KPIs (including medians, dissatisfied %, open chats, attachments, groups) remain the source of truth until new Extract events are enabled in `SYNC_EVENTS`.
+`/dashboard` stays the dense ops kitchen sink.
+
+**Round 4:** Leadership pages at `/insights/cx` and `/insights/marketing`; `breakdowns.bySubject`; derived `botOnlyRate` / `botInvolvedRate`; unlabeled subject drill-down.
 
 *Items marked 🆕 only are proposed. Items marked ✅🆕 are confirmed Freshchat types but still need account enablement + sync before UI. Items marked 🟢 are live against current Mongo warehouse.*
