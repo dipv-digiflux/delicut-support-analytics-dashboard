@@ -26,7 +26,7 @@ Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Support Analytics | Chrome branding |
+| `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Freshchat Support Analytics | Chrome branding |
 | `DASHBOARD_API_SECRET` | _(empty)_ | Optional Bearer gate for scripts hitting `/api/*` |
 | `DASHBOARD_SESSION_SECRET` | _(derived)_ | HMAC secret for session cookies |
 | `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats |

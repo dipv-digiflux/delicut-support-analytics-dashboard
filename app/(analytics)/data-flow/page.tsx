@@ -37,7 +37,7 @@ export default async function DataFlowPage() {
           <InfoTip text="How Freshchat data reaches this dashboard, what we store, and what each screen reads. Source of truth is Extract CSV + Users API into Mongo — the UI never calls Freshchat for KPIs." />
         </h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          {cfg.APP_BRAND_NAME} Support Analytics · warehouse is local Mongo (
+          {cfg.APP_BRAND_NAME} FreshChat Support Analytics · warehouse is local Mongo (
           {cfg.MONGODB_DB})
         </p>
       </div>

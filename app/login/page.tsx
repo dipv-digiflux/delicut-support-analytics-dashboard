@@ -44,7 +44,7 @@ function LoginForm() {
     >
       <h1 className="text-xl font-bold text-[var(--brand-ink)]">Admin sign in</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">
-        Delicut Support Analytics is restricted. Use your admin ID and password.
+        Delicut FreshChat Support Analytics is restricted. Use your admin ID and password.
       </p>
 
       <label className="mt-5 block text-xs font-medium text-[var(--muted)]">

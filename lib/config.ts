@@ -54,7 +54,7 @@ const ConfigSchema = z.object({
   /** Sidebar + document title brand */
   APP_BRAND_NAME: z.string().default("Delicut"),
   /** Product subtitle under brand */
-  APP_PRODUCT_NAME: z.string().default("Support Analytics"),
+  APP_PRODUCT_NAME: z.string().default("FreshChat Support Analytics"),
   /**
    * Default reporting timezone when URL/localStorage has no `tz`.
    * UI dropdown: Asia/Dubai | Asia/Kolkata | UTC
