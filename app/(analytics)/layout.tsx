@@ -51,7 +51,9 @@ export default function AnalyticsLayout({
             <Suspense fallback={null}>
               <TimezoneSwitcher defaultTimeZone={defaultTz} />
             </Suspense>
-            <SyncStatusBadge />
+            <Suspense fallback={<div className="text-xs text-slate-400">Checking sync…</div>}>
+              <SyncStatusBadge defaultTimeZone={defaultTz} />
+            </Suspense>
             {showLogout && <LogoutButton />}
           </div>
         </header>

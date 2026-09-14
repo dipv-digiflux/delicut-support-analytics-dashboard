@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
 import {
   DATA_FLOW_PIPES,
@@ -6,13 +7,27 @@ import {
   NOT_GETTING,
   UI_SURFACES,
 } from "@/lib/data-flow-content";
+import { getDbCoverage } from "@/lib/sync/coverage";
+import {
+  formatDateOnlyInTimeZone,
+  formatInTimeZone,
+  timezoneLabel,
+} from "@/lib/timezone";
 import { InfoTip } from "@/components/ui/InfoTip";
 
 export const dynamic = "force-dynamic";
 
-export default function DataFlowPage() {
+export default async function DataFlowPage() {
   const cfg = getConfig();
   const enabled = new Set(cfg.syncEvents);
+  const tz = cfg.REPORTING_TIMEZONE;
+  const [coverage, sync] = await Promise.all([getDbCoverage(), getSyncStatus()]);
+  const conv = coverage.collections.find((c) => c.name === "conversations");
+  const customers =
+    coverage.collections.find((c) => c.name === "users (customers)")?.count ?? 0;
+  const coverageByEvent = new Map(
+    coverage.mergedEvents.map((e) => [e.event, e]),
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -26,6 +41,63 @@ export default function DataFlowPage() {
           {cfg.MONGODB_DB})
         </p>
       </div>
+
+      <section className="mb-6 rounded-xl border border-[var(--border)] bg-white p-4">
+        <h2 className="mb-1 flex items-center text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Data available
+          <InfoTip text="This is what is already in Mongo from Extract syncs — not a live Freshchat range. Dashboard filters outside this span will look empty." />
+        </h2>
+        <p className="text-lg font-semibold text-[var(--brand-ink)]">
+          {dateSpan(conv?.from ?? null, conv?.to ?? null, tz)}
+        </p>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          Conversations by created time · {timezoneLabel(tz)}
+          {conv?.count
+            ? ` · ${conv.count.toLocaleString("en-GB")} chats`
+            : " · no chats yet"}
+          {customers
+            ? ` · ${customers.toLocaleString("en-GB")} customers`
+            : ""}
+        </p>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Last sync{" "}
+          {sync.lastCompletedAt
+            ? formatInTimeZone(sync.lastCompletedAt, tz)
+            : "never"}
+          {sync.campaign
+            ? ` · campaign ${sync.campaign.id}: ${dateSpan(sync.campaign.since, exclusiveEnd(sync.campaign.until), tz)} (${sync.campaign.status})`
+            : ""}
+        </p>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="border-b border-[var(--border)] text-[11px] uppercase tracking-wide text-[var(--muted)]">
+              <tr>
+                <th className="py-1.5 pr-3">Extract event</th>
+                <th className="py-1.5 pr-3">Merged in Mongo</th>
+                <th className="py-1.5">Windows</th>
+              </tr>
+            </thead>
+            <tbody>
+              {EXTRACT_EVENTS.filter((e) => enabled.has(e.event)).map((e) => {
+                const row = coverageByEvent.get(e.event);
+                return (
+                  <tr key={e.event} className="border-b border-[var(--border)] last:border-0">
+                    <td className="py-1.5 pr-3 font-mono text-xs">{e.event}</td>
+                    <td className="py-1.5 pr-3 text-[var(--muted)]">
+                      {row
+                        ? dateSpan(row.from, exclusiveEnd(row.to), tz)
+                        : "Not merged yet"}
+                    </td>
+                    <td className="py-1.5 text-[var(--muted)]">
+                      {row ? row.windows.toLocaleString("en-GB") : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="How data arrives" value="We pull (Extract)" />
@@ -152,17 +224,24 @@ export default function DataFlowPage() {
               </tr>
             </thead>
             <tbody>
-              {UI_SURFACES.map((s) => (
+              {UI_SURFACES.map((s) => {
+                const href = appHref(s.path);
+                return (
                 <tr key={s.path} className="border-b border-[var(--border)] last:border-0">
                   <td className="px-3 py-2">
-                    <Link href={s.path.startsWith("/api") ? "/conversations" : s.path} className="font-medium text-[var(--brand)] hover:underline">
-                      {s.name}
-                    </Link>
+                    {href ? (
+                      <Link href={href} className="font-medium text-[var(--brand)] hover:underline">
+                        {s.name}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-[var(--brand-ink)]">{s.name}</span>
+                    )}
                     <div className="font-mono text-[10px] text-[var(--muted)]">{s.path}</div>
                   </td>
                   <td className="px-3 py-2 text-[var(--muted)]">{s.reads}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -180,6 +259,30 @@ export default function DataFlowPage() {
       </section>
     </div>
   );
+}
+
+function exclusiveEnd(d: Date | string | null | undefined): Date | null {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getTime() - 1);
+}
+
+function dateSpan(
+  from: Date | string | null | undefined,
+  to: Date | string | null | undefined,
+  tz: string,
+): string {
+  if (!from && !to) return "None yet";
+  return `${formatDateOnlyInTimeZone(from, tz)} → ${formatDateOnlyInTimeZone(to, tz)}`;
+}
+
+/** App Router <Link> cannot take template paths like /conversations/[id]. */
+function appHref(path: string): string | null {
+  if (path.startsWith("/api")) return "/conversations";
+  if (!path.startsWith("/")) return null;
+  const concrete = path.replace(/\/\[[^\]]+\]/g, "");
+  return concrete || "/";
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

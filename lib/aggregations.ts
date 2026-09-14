@@ -429,8 +429,27 @@ export async function exportMessagesCsv(
 export async function getSyncStatus() {
   const { syncRuns, conversations } = await collections();
   const cfg = getConfig();
-  const latest = await syncRuns.find({}).sort({ started_at: -1 }).limit(1).next();
-  const count = await conversations.estimatedDocumentCount();
+  const [latest, count, convBounds] = await Promise.all([
+    syncRuns.find({}).sort({ started_at: -1 }).limit(1).next(),
+    conversations.estimatedDocumentCount(),
+    conversations
+      .aggregate<{ min: Date | null; max: Date | null }>([
+        {
+          $group: {
+            _id: null,
+            min: { $min: "$created_at" },
+            max: { $max: "$created_at" },
+          },
+        },
+        { $project: { _id: 0, min: 1, max: 1 } },
+      ])
+      .next(),
+  ]);
+  const warehouse = {
+    from: convBounds?.min ?? null,
+    to: convBounds?.max ?? null,
+    conversations: count,
+  };
   const active =
     (await getLatestActiveCampaign()) || (await getLatestCampaign());
   const transcriptQuotaLeft = await remainingQuota("Chat-Transcript");
@@ -468,6 +487,7 @@ export async function getSyncStatus() {
       counters: null,
       campaign,
       quota,
+      warehouse,
     };
   }
 
@@ -499,5 +519,6 @@ export async function getSyncStatus() {
     counters: latest.counters,
     campaign,
     quota,
+    warehouse,
   };
 }

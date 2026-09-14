@@ -1,6 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  TZ_STORAGE_KEY,
+  formatDateOnlyInTimeZone,
+  resolveTimeZone,
+  type AppTimeZone,
+} from "@/lib/timezone";
 
 type SyncPayload = {
   state?: string;
@@ -18,11 +26,34 @@ type SyncPayload = {
     } | null;
   } | null;
   quota?: { remaining: number; maxPerDay: number } | null;
+  warehouse?: {
+    from: string | null;
+    to: string | null;
+    conversations: number;
+  } | null;
 };
 
-export function SyncStatusBadge() {
+export function SyncStatusBadge({
+  defaultTimeZone,
+}: {
+  defaultTimeZone: string;
+}) {
+  const sp = useSearchParams();
   const [label, setLabel] = useState("Checking sync…");
   const [tone, setTone] = useState("text-slate-500");
+  const [warehouse, setWarehouse] = useState<SyncPayload["warehouse"]>(null);
+  const [tz, setTz] = useState<AppTimeZone>(() =>
+    resolveTimeZone(defaultTimeZone),
+  );
+
+  useEffect(() => {
+    const fromUrl = sp.get("tz");
+    const fromStore =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(TZ_STORAGE_KEY)
+        : null;
+    setTz(resolveTimeZone(fromUrl || fromStore || defaultTimeZone));
+  }, [sp, defaultTimeZone]);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +66,7 @@ export function SyncStatusBadge() {
         const state = data?.state;
         const at = data?.lastCompletedAt;
         const camp = data?.campaign;
+        setWarehouse(data?.warehouse ?? null);
 
         if (camp && camp.status !== "completed" && camp.total > 0) {
           const pendingDays = camp.checkpoint?.pending_transcript_days;
@@ -106,5 +138,24 @@ export function SyncStatusBadge() {
     };
   }, []);
 
-  return <div className={`text-xs ${tone}`}>{label}</div>;
+  const span =
+    warehouse?.from || warehouse?.to
+      ? `${formatDateOnlyInTimeZone(warehouse.from, tz)} → ${formatDateOnlyInTimeZone(warehouse.to, tz)}`
+      : null;
+
+  return (
+    <Link
+      href="/data-flow"
+      className="text-right"
+      title="Warehouse date range from synced conversations. Open Data flow for per-event coverage."
+    >
+      <div className="hidden text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)] sm:block">
+        Data available
+      </div>
+      <div className="text-xs font-medium text-[var(--brand-800)]">
+        {span || "None yet"}
+      </div>
+      <div className={`text-xs ${tone}`}>{label}</div>
+    </Link>
+  );
 }

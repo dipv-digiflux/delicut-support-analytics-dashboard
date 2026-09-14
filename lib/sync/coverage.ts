@@ -9,6 +9,13 @@ export interface CollectionCoverage {
   to: Date | null;
 }
 
+export interface MergedEventCoverage {
+  event: ExtractEvent;
+  from: Date | null;
+  to: Date | null;
+  windows: number;
+}
+
 export interface FailedWindowSummary {
   _id: string;
   event: ExtractEvent;
@@ -25,6 +32,7 @@ export interface DbCoverageReport {
   failed: FailedWindowSummary[];
   exhaustedAttempts: FailedWindowSummary[];
   missingTranscriptDays: number;
+  mergedEvents: MergedEventCoverage[];
   campaign?: {
     id: string;
     since: Date;
@@ -114,6 +122,28 @@ export async function getDbCoverage(opts?: {
     ])
     .toArray();
 
+  const mergedEventRows = await syncWindows
+    .aggregate<{ _id: ExtractEvent; from: Date; to: Date; n: number }>([
+      { $match: { status: "merged" } },
+      {
+        $group: {
+          _id: "$event",
+          from: { $min: "$window_start" },
+          to: { $max: "$window_end" },
+          n: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ])
+    .toArray();
+
+  const mergedEvents: MergedEventCoverage[] = mergedEventRows.map((r) => ({
+    event: r._id,
+    from: r.from ?? null,
+    to: r.to ?? null,
+    windows: r.n,
+  }));
+
   const windowsByStatus: Record<string, number> = {};
   for (const r of statusRows) windowsByStatus[r._id] = r.n;
 
@@ -176,6 +206,7 @@ export async function getDbCoverage(opts?: {
     failed: failed.slice(0, maxFailed),
     exhaustedAttempts: exhaustedAttempts.slice(0, maxFailed),
     missingTranscriptDays,
+    mergedEvents,
     campaign,
   };
 }
