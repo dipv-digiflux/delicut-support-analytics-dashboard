@@ -326,7 +326,7 @@ function cell(id: ColId, row: ConversationRow, timeZone: string) {
         </Link>
       );
     case "raw":
-      return <RawJsonButton data={row} />;
+      return <RawJsonButton href={`/api/conversations/${row.id}`} />;
     default:
       return null;
   }

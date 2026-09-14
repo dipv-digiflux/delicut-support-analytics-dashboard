@@ -12,23 +12,17 @@ import {
   getLatestCampaign,
 } from "@/lib/sync/campaign";
 import { remainingQuota } from "@/lib/freshchat/budget";
+import { LIST_PROJECT } from "@/lib/conversation-stats";
+import {
+  collectRawColumnKeys,
+  mapChatMessage,
+  messageExportHeaders,
+  messageExportRow,
+  toCsv,
+} from "@/lib/export-messages";
+import type { EmbeddedMessage } from "@/lib/db/types";
 
-/** Mongo: `$csat.rating` is "missing" when parent `csat` is null — `$ne null` is wrongly true. */
-const HAS_CSAT_RATING = {
-  $in: [{ $type: "$csat.rating" }, ["double", "int", "long", "decimal"]],
-} as const;
-
-const HAS_RESOLUTION_LABEL = {
-  $and: [
-    { $eq: [{ $type: "$resolution.label" }, "string"] },
-    { $ne: ["$resolution.label", ""] },
-  ],
-} as const;
-
-function avg(nums: number[]): number | null {
-  if (!nums.length) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
+export { getKpis } from "@/lib/kpis";
 
 async function matchFor(filters: ConversationFilters) {
   const searchUserIds = filters.q?.trim()
@@ -37,700 +31,37 @@ async function matchFor(filters: ConversationFilters) {
   return buildConversationMatch(filters, searchUserIds);
 }
 
-export async function getKpis(filters: ConversationFilters) {
-  const { conversations } = await collections();
-  const match = await matchFor(filters);
-
-  const [stats] = await conversations
-    .aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          uniqueUsers: { $addToSet: "$primary_user_id" },
-          resolvedCount: {
-            $sum: { $cond: [{ $eq: ["$resolved", true] }, 1, 0] },
-          },
-          openCount: {
-            $sum: { $cond: [{ $eq: ["$resolved", true] }, 0, 1] },
-          },
-          reopenedCount: {
-            $sum: { $cond: [{ $eq: ["$reopened", true] }, 1, 0] },
-          },
-          ratedCount: {
-            $sum: {
-              $cond: [HAS_CSAT_RATING, 1, 0],
-            },
-          },
-          csatSum: { $sum: { $ifNull: ["$csat.rating", 0] } },
-          satisfiedCount: {
-            $sum: {
-              $cond: [
-                { $and: [HAS_CSAT_RATING, { $gte: ["$csat.rating", 4] }] },
-                1,
-                0,
-              ],
-            },
-          },
-          dissatisfiedCount: {
-            $sum: {
-              $cond: [
-                { $and: [HAS_CSAT_RATING, { $lte: ["$csat.rating", 2] }] },
-                1,
-                0,
-              ],
-            },
-          },
-          labeledCount: {
-            $sum: {
-              $cond: [HAS_RESOLUTION_LABEL, 1, 0],
-            },
-          },
-          messageSum: { $sum: { $ifNull: ["$message_count", 0] } },
-          withAttachments: {
-            $sum: {
-              $cond: [
-                {
-                  $gt: [
-                    {
-                      $size: {
-                        $filter: {
-                          input: { $ifNull: ["$messages", []] },
-                          as: "m",
-                          cond: {
-                            $or: [
-                              { $eq: ["$$m.has_attachment", true] },
-                              {
-                                $gt: [
-                                  {
-                                    $size: { $ifNull: ["$$m.attachments", []] },
-                                  },
-                                  0,
-                                ],
-                              },
-                            ],
-                          },
-                        },
-                      },
-                    },
-                    0,
-                  ],
-                },
-                1,
-                0,
-              ],
-            },
-          },
-          frtValues: {
-            $push: {
-              $cond: [
-                { $ne: ["$metrics.first_response_time_seconds", null] },
-                "$metrics.first_response_time_seconds",
-                "$$REMOVE",
-              ],
-            },
-          },
-          resTimeValues: {
-            $push: {
-              $cond: [
-                { $ne: ["$metrics.resolution_time_seconds", null] },
-                "$metrics.resolution_time_seconds",
-                "$$REMOVE",
-              ],
-            },
-          },
-        },
-      },
-    ])
-    .toArray();
-
-  const total = stats?.total || 0;
-  const uniqueUsers = (stats?.uniqueUsers || []).filter(Boolean).length;
-  const ratedCount = stats?.ratedCount || 0;
-  const resolvedCount = stats?.resolvedCount || 0;
-  const openCount = stats?.openCount || 0;
-  const dissatisfiedCount = stats?.dissatisfiedCount || 0;
-  const withAttachments = stats?.withAttachments || 0;
-  const frtAvg = avg((stats?.frtValues as number[]) || []);
-  const resAvg = avg((stats?.resTimeValues as number[]) || []);
-  const frtValues = (stats?.frtValues as number[]) || [];
-  const resValues = (stats?.resTimeValues as number[]) || [];
-  const median = (nums: number[]) => {
-    if (!nums.length) return null;
-    const s = [...nums].sort((a, b) => a - b);
-    const mid = Math.floor(s.length / 2);
-    return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
-  };
-
-  const dailyVolume = await conversations
-    .aggregate([
-      { $match: { ...match, created_at: { $ne: null } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$created_at" },
-          },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ])
-    .toArray();
-
-  // Resolved volume by resolve day (not create day) — accurate close-out trend
-  const dailyResolved = await conversations
-    .aggregate([
-      {
-        $match: {
-          ...match,
-          resolved: true,
-          resolved_at: { $ne: null },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$resolved_at" },
-          },
-          resolved: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ])
-    .toArray();
-
-  const resolvedByDay = new Map(
-    dailyResolved.map((d) => [d._id as string, d.resolved as number]),
-  );
-  const createdByDay = new Map(
-    dailyVolume.map((d) => [d._id as string, d.count as number]),
-  );
-  const allDays = [
-    ...new Set([...createdByDay.keys(), ...resolvedByDay.keys()]),
-  ].sort();
-  const dailyVolumeMerged = allDays.map((date) => ({
-    date,
-    count: createdByDay.get(date) || 0,
-    resolved: resolvedByDay.get(date) || 0,
-  }));
-
-  const dailyCsat = await conversations
-    .aggregate([
-      { $match: { ...match, "csat.rating": { $ne: null } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: { $ifNull: ["$csat.submitted_at", "$created_at"] },
-            },
-          },
-          average: { $avg: "$csat.rating" },
-          ratedCount: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ])
-    .toArray();
-
-  const csatDistribution = await conversations
-    .aggregate([
-      { $match: { ...match, "csat.rating": { $ne: null } } },
-      { $group: { _id: "$csat.rating", count: { $sum: 1 } } },
-      { $sort: { _id: 1 } },
-    ])
-    .toArray();
-
-  const bySubject = await conversations
-    .aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: {
-            $cond: [
-              {
-                $or: [
-                  { $eq: ["$derived.subject", null] },
-                  { $eq: ["$derived.subject", ""] },
-                ],
-              },
-              "(no Freshchat label)",
-              "$derived.subject",
-            ],
-          },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { count: -1 } },
-      { $limit: 15 },
-    ])
-    .toArray();
-
-  const byChannel = await conversations
-    .aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: { $ifNull: ["$channel_name", "Unknown"] },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { count: -1 } },
-      { $limit: 10 },
-    ])
-    .toArray();
-
-  const averageCsatByAgent = await conversations
-    .aggregate([
-      { $match: { ...match, "csat.rating": { $ne: null } } },
-      {
-        $group: {
-          _id: {
-            id: { $ifNull: ["$assigned_agent_id", "unassigned"] },
-            name: { $ifNull: ["$assigned_agent_name", "Unassigned"] },
-          },
-          average: { $avg: "$csat.rating" },
-          ratedCount: { $sum: 1 },
-        },
-      },
-      { $sort: { average: -1 } },
-      { $limit: 15 },
-    ])
-    .toArray();
-
-  // Deep breakdowns: channel / agent (who's responding) / group
-  const [channelDeep, agentDeep, groupDeep] = await Promise.all([
-    dimensionBreakdown(conversations, match, {
-      id: { $literal: null },
-      name: { $ifNull: ["$channel_name", "Unknown"] },
-    }),
-    dimensionBreakdown(conversations, match, {
-      id: { $ifNull: ["$assigned_agent_id", "unassigned"] },
-      name: { $ifNull: ["$assigned_agent_name", "Unassigned"] },
-    }),
-    dimensionBreakdown(conversations, match, {
-      id: { $ifNull: ["$group_id", "none"] },
-      name: { $ifNull: ["$group_name", "No group"] },
-    }),
-  ]);
-
-  const unassignedCount = await conversations.countDocuments({
-    ...match,
-    $or: [
-      { assigned_agent_id: null },
-      { assigned_agent_id: { $exists: false } },
-      { assigned_agent_id: "" },
-    ],
-  });
-
-  const tz = filters.timeZone || "Asia/Dubai";
-
-  const [
-    volumeHeatmapRaw,
-    frtBucketsRaw,
-    resolveBucketsRaw,
-    actorShareRaw,
-    resolvedMixRaw,
-    csatByChannelRaw,
-    labelTrendRaw,
-  ] = await Promise.all([
-    conversations
-      .aggregate([
-        { $match: { ...match, created_at: { $ne: null } } },
-        {
-          $group: {
-            _id: {
-              dow: {
-                $dayOfWeek: { date: "$created_at", timezone: tz },
-              },
-              hour: {
-                $hour: { date: "$created_at", timezone: tz },
-              },
-            },
-            count: { $sum: 1 },
-          },
-        },
-      ])
-      .toArray(),
-    conversations
-      .aggregate([
-        {
-          $match: {
-            ...match,
-            "metrics.first_response_time_seconds": { $ne: null },
-          },
-        },
-        {
-          $bucket: {
-            groupBy: "$metrics.first_response_time_seconds",
-            boundaries: [0, 60, 300, 900, 3600, 14400, 99999999],
-            default: "other",
-            output: { count: { $sum: 1 } },
-          },
-        },
-      ])
-      .toArray(),
-    conversations
-      .aggregate([
-        {
-          $match: {
-            ...match,
-            "metrics.resolution_time_seconds": { $ne: null },
-          },
-        },
-        {
-          $bucket: {
-            groupBy: "$metrics.resolution_time_seconds",
-            boundaries: [0, 900, 3600, 14400, 86400, 259200, 99999999],
-            default: "other",
-            output: { count: { $sum: 1 } },
-          },
-        },
-      ])
-      .toArray(),
-    conversations
-      .aggregate([
-        { $match: match },
-        { $unwind: "$messages" },
-        {
-          $group: {
-            _id: { $ifNull: ["$messages.actor_type", "unknown"] },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { count: -1 } },
-      ])
-      .toArray(),
-    conversations
-      .aggregate([
-        { $match: match },
-        {
-          $group: {
-            _id: {
-              $cond: [{ $eq: ["$resolved", true] }, "Resolved", "Open"],
-            },
-            count: { $sum: 1 },
-          },
-        },
-      ])
-      .toArray(),
-    conversations
-      .aggregate([
-        {
-          $match: {
-            ...match,
-            "csat.rating": { $ne: null },
-            channel_name: { $ne: null },
-          },
-        },
-        {
-          $group: {
-            _id: "$channel_name",
-            average: { $avg: "$csat.rating" },
-            ratedCount: { $sum: 1 },
-          },
-        },
-        { $sort: { ratedCount: -1 } },
-        { $limit: 10 },
-      ])
-      .toArray(),
-    conversations
-      .aggregate([
-        { $match: { ...match, created_at: { $ne: null } } },
-        {
-          $addFields: {
-            _label: {
-              $cond: [
-                {
-                  $or: [
-                    { $eq: ["$derived.subject", null] },
-                    { $eq: ["$derived.subject", ""] },
-                    { $eq: [{ $ifNull: ["$resolution.label", ""] }, ""] },
-                  ],
-                },
-                "unlabeled",
-                {
-                  $ifNull: [
-                    "$derived.subject",
-                    { $ifNull: ["$resolution.label", "unlabeled"] },
-                  ],
-                },
-              ],
-            },
-            _day: {
-              $dateToString: {
-                format: "%Y-%m-%d",
-                date: "$created_at",
-                timezone: tz,
-              },
-            },
-          },
-        },
-        {
-          $group: {
-            _id: { day: "$_day", label: "$_label" },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { "_id.day": 1 } },
-      ])
-      .toArray(),
-  ]);
-
-  const FRT_BUCKET_LABELS = [
-    { key: 0, label: "<1m" },
-    { key: 60, label: "1–5m" },
-    { key: 300, label: "5–15m" },
-    { key: 900, label: "15–60m" },
-    { key: 3600, label: "1–4h" },
-    { key: 14400, label: ">4h" },
-  ];
-  const RES_BUCKET_LABELS = [
-    { key: 0, label: "<15m" },
-    { key: 900, label: "15–60m" },
-    { key: 3600, label: "1–4h" },
-    { key: 14400, label: "4–24h" },
-    { key: 86400, label: "1–3d" },
-    { key: 259200, label: ">3d" },
-  ];
-
-  const frtMap = new Map(
-    frtBucketsRaw.map((b) => [b._id as number | string, b.count as number]),
-  );
-  const resMap = new Map(
-    resolveBucketsRaw.map((b) => [b._id as number | string, b.count as number]),
-  );
-
-  // Heatmap: Mongo $dayOfWeek 1=Sun … 7=Sat → display Mon–Sun
-  const heatmapCells = volumeHeatmapRaw.map((r) => {
-    const mongoDow = Number(r._id.dow); // 1 Sun .. 7 Sat
-    const weekday = mongoDow === 1 ? 6 : mongoDow - 2; // 0 Mon .. 6 Sun
-    return {
-      weekday,
-      hour: Number(r._id.hour),
-      count: r.count as number,
-    };
-  });
-
-  // Label trend: keep top 5 labels by total, then series by day
-  const labelTotals = new Map<string, number>();
-  for (const row of labelTrendRaw) {
-    const label = String(row._id.label);
-    labelTotals.set(label, (labelTotals.get(label) || 0) + (row.count as number));
-  }
-  const topLabels = [...labelTotals.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([l]) => l);
-  const labelDays = [
-    ...new Set(labelTrendRaw.map((r) => String(r._id.day))),
-  ].sort();
-  const labelTrend = {
-    days: labelDays,
-    series: topLabels.map((label) => ({
-      label,
-      counts: labelDays.map((day) => {
-        const hit = labelTrendRaw.find(
-          (r) => String(r._id.day) === day && String(r._id.label) === label,
-        );
-        return (hit?.count as number) || 0;
-      }),
-    })),
-  };
-
-  return {
-    kpis: {
-      total,
-      uniqueUsers,
-      openCount,
-      openRate: total ? openCount / total : null,
-      resolutionRate: total ? resolvedCount / total : null,
-      reopenRate: total ? (stats?.reopenedCount || 0) / total : null,
-      averageCsat: ratedCount ? stats.csatSum / ratedCount : null,
-      ratedCount,
-      csatResponseRate: total ? ratedCount / total : null,
-      satisfiedRate: ratedCount ? stats.satisfiedCount / ratedCount : null,
-      dissatisfiedRate: ratedCount ? dissatisfiedCount / ratedCount : null,
-      labelCoverage: total ? (stats?.labeledCount || 0) / total : null,
-      avgMessages: total ? (stats?.messageSum || 0) / total : null,
-      avgFirstResponseSeconds: frtAvg,
-      medianFirstResponseSeconds: median(frtValues),
-      avgResolutionSeconds: resAvg,
-      medianResolutionSeconds: median(resValues),
-      chatsWithAttachments: withAttachments,
-      attachmentRate: total ? withAttachments / total : null,
-      unassignedCount,
-      unassignedRate: total ? unassignedCount / total : null,
-      agentCount: agentDeep.length,
-      channelCount: channelDeep.length,
-      groupCount: groupDeep.length,
-    },
-    charts: {
-      dailyVolume: dailyVolumeMerged,
-      dailyCsat: dailyCsat.map((d) => ({
-        date: d._id,
-        average: Number(d.average?.toFixed?.(2) ?? d.average),
-        ratedCount: d.ratedCount,
-      })),
-      csatDistribution: [1, 2, 3, 4, 5].map((rating) => ({
-        rating,
-        count: csatDistribution.find((x) => x._id === rating)?.count || 0,
-      })),
-      bySubject: bySubject.map((s) => ({
-        subject: s._id,
-        label: s._id,
-        count: s.count,
-      })),
-      byChannel: byChannel.map((c) => ({
-        channel: c._id,
-        count: c.count,
-      })),
-      averageCsatByAgent: averageCsatByAgent.map((a) => ({
-        agentId: a._id.id,
-        agentName: a._id.name,
-        average: Number(a.average?.toFixed?.(2) ?? a.average),
-        ratedCount: a.ratedCount,
-      })),
-      agentVolume: agentDeep.slice(0, 15).map((a) => ({
-        agentId: a.id,
-        agentName: a.name,
-        count: a.conversations,
-      })),
-      volumeHeatmap: heatmapCells,
-      frtDistribution: FRT_BUCKET_LABELS.map((b) => ({
-        bucket: b.label,
-        count: frtMap.get(b.key) || 0,
-      })),
-      resolutionDistribution: RES_BUCKET_LABELS.map((b) => ({
-        bucket: b.label,
-        count: resMap.get(b.key) || 0,
-      })),
-      actorShare: actorShareRaw.map((a) => ({
-        actor: String(a._id),
-        count: a.count as number,
-      })),
-      resolvedMix: resolvedMixRaw.map((r) => ({
-        status: String(r._id),
-        count: r.count as number,
-      })),
-      csatByChannel: csatByChannelRaw.map((c) => ({
-        channel: String(c._id),
-        average: Number(c.average?.toFixed?.(2) ?? c.average),
-        ratedCount: c.ratedCount as number,
-      })),
-      labelTrend,
-    },
-    breakdowns: {
-      byChannel: channelDeep,
-      byAgent: agentDeep,
-      byGroup: groupDeep,
-    },
-  };
-}
-
-type DimId = { id: unknown; name: unknown };
-
-async function dimensionBreakdown(
-  conversations: Awaited<ReturnType<typeof collections>>["conversations"],
-  match: Record<string, unknown>,
-  dim: DimId,
-) {
-  const rows = await conversations
-    .aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: dim,
-          conversations: { $sum: 1 },
-          resolved: {
-            $sum: { $cond: [{ $eq: ["$resolved", true] }, 1, 0] },
-          },
-          reopened: {
-            $sum: { $cond: [{ $eq: ["$reopened", true] }, 1, 0] },
-          },
-          rated: {
-            $sum: { $cond: [HAS_CSAT_RATING, 1, 0] },
-          },
-          csatSum: { $sum: { $ifNull: ["$csat.rating", 0] } },
-          satisfied: {
-            $sum: {
-              $cond: [
-                { $and: [HAS_CSAT_RATING, { $gte: ["$csat.rating", 4] }] },
-                1,
-                0,
-              ],
-            },
-          },
-          messages: { $sum: { $ifNull: ["$message_count", 0] } },
-          frtSum: {
-            $sum: { $ifNull: ["$metrics.first_response_time_seconds", 0] },
-          },
-          frtCount: {
-            $sum: {
-              $cond: [
-                { $ne: ["$metrics.first_response_time_seconds", null] },
-                1,
-                0,
-              ],
-            },
-          },
-          resSum: {
-            $sum: { $ifNull: ["$metrics.resolution_time_seconds", 0] },
-          },
-          resCount: {
-            $sum: {
-              $cond: [
-                { $ne: ["$metrics.resolution_time_seconds", null] },
-                1,
-                0,
-              ],
-            },
-          },
-        },
-      },
-      { $sort: { conversations: -1 } },
-      { $limit: 25 },
-    ])
-    .toArray();
-
-  return rows.map((r) => {
-    const conversationsCount = r.conversations || 0;
-    const rated = r.rated || 0;
-    return {
-      id: String(r._id?.id ?? r._id?.name ?? "unknown"),
-      name: String(r._id?.name ?? "Unknown"),
-      conversations: conversationsCount,
-      resolved: r.resolved || 0,
-      resolutionRate: conversationsCount ? r.resolved / conversationsCount : null,
-      reopened: r.reopened || 0,
-      reopenRate: conversationsCount ? r.reopened / conversationsCount : null,
-      rated,
-      avgCsat: rated ? r.csatSum / rated : null,
-      satisfiedRate: rated ? r.satisfied / rated : null,
-      csatResponseRate: conversationsCount ? rated / conversationsCount : null,
-      avgMessages: conversationsCount ? r.messages / conversationsCount : null,
-      avgFirstResponseSeconds: r.frtCount ? r.frtSum / r.frtCount : null,
-      avgResolutionSeconds: r.resCount ? r.resSum / r.resCount : null,
-    };
-  });
-}
-
 export async function listConversations(filters: ConversationFilters) {
   const { conversations, users } = await collections();
   const match = await matchFor(filters);
-  const totalItems = await conversations.countDocuments(match);
-  const items = await conversations
-    .find(match)
-    .sort(sortSpec(filters))
-    .skip((filters.page - 1) * filters.limit)
-    .limit(filters.limit)
-    .toArray();
+  const [totalItems, items] = await Promise.all([
+    conversations.countDocuments(match),
+    conversations
+      .find(match, { projection: LIST_PROJECT })
+      .sort(sortSpec(filters))
+      .skip((filters.page - 1) * filters.limit)
+      .limit(filters.limit)
+      .toArray(),
+  ]);
 
   const userIds = [
     ...new Set(items.map((i) => i.primary_user_id).filter(Boolean)),
   ] as string[];
-  const userDocs = await users.find({ _id: { $in: userIds } }).toArray();
+  const userDocs = userIds.length
+    ? await users
+        .find(
+          { _id: { $in: userIds } },
+          {
+            projection: {
+              first_name: 1,
+              last_name: 1,
+              email: 1,
+              phone: 1,
+            },
+          },
+        )
+        .toArray()
+    : [];
   const userMap = new Map(userDocs.map((u) => [u._id, u]));
 
   return {
@@ -775,14 +106,11 @@ export async function listConversations(filters: ConversationFilters) {
         csat: c.csat?.rating ?? null,
         csatComment: c.csat?.comment || null,
         messageCount: c.message_count,
-        attachmentCount: (c.messages || []).reduce(
-          (n, m) => n + (m.attachments?.length || (m.has_attachment ? 1 : 0)),
-          0,
-        ),
+        attachmentCount: c.attachment_count ?? 0,
         lastMessageAt: c.last_message_at,
         firstResponseSeconds: c.metrics?.first_response_time_seconds ?? null,
         resolutionSeconds: c.metrics?.resolution_time_seconds ?? null,
-        preview: c.messages.find((m) => m.actor_type === "user")?.text || "",
+        preview: c.preview_text || "",
         conversationUrl: c.conversation_url,
         isStub: c.is_stub,
       };
@@ -792,13 +120,30 @@ export async function listConversations(filters: ConversationFilters) {
   };
 }
 
-export async function getConversation(id: string) {
+export async function getConversation(
+  id: string,
+  opts?: { includeMessages?: boolean },
+) {
   const { conversations, users } = await collections();
-  const c = await conversations.findOne({ _id: id });
+  const c = await conversations.findOne(
+    { _id: id },
+    opts?.includeMessages ? undefined : { projection: { messages: 0 } },
+  );
   if (!c) return null;
 
   const u = c.primary_user_id
-    ? await users.findOne({ _id: c.primary_user_id })
+    ? await users.findOne(
+        { _id: c.primary_user_id },
+        {
+          projection: {
+            first_name: 1,
+            last_name: 1,
+            email: 1,
+            phone: 1,
+            properties: 1,
+          },
+        },
+      )
     : null;
 
   const subjectLabel = c.derived?.subject || c.resolution?.label || "";
@@ -856,7 +201,7 @@ export async function getConversation(id: string) {
         ]
       : [],
     messageCount: c.message_count,
-    /** Prefer paginated /messages API — include a small preview only */
+    messagesTruncated: c.messages_truncated,
     messages: [],
     raw: c,
   };
@@ -899,48 +244,13 @@ export async function listConversationMessages(opts: {
   const hasMore = rows.length > limit;
   const slice = rows.slice(0, limit);
 
-  const items = slice.map((r) => {
-    const m = r.message as {
-      message_id: string;
-      created_at: Date;
-      actor_type: string;
-      actor_id: string | null;
-      actor_email?: string | null;
-      actor_first_name?: string | null;
-      actor_last_name?: string | null;
-      text: string;
-      has_attachment: boolean;
-      attachments?: unknown[];
-      message_source?: string | null;
-      raw?: Record<string, string>;
-    };
-    const actorName = [m.actor_first_name, m.actor_last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    return {
-      messageId: m.message_id,
+  const items = slice.map((r) =>
+    mapChatMessage(r.message as EmbeddedMessage, {
       conversationId: opts.conversationId,
-      createdAt: m.created_at,
-      actorType: m.actor_type,
-      actorId: m.actor_id,
-      actorName: actorName || null,
-      actorEmail: m.actor_email || null,
-      text: m.text,
-      hasAttachment: m.has_attachment,
-      attachments: (m.attachments || []) as {
-        kind: string;
-        url: string | null;
-        file_name: string | null;
-        mime_type?: string | null;
-        thumbnail_url?: string | null;
-      }[],
       channelName: (r.channelName as string) || null,
       channelId: (r.channelId as string) || null,
-      messageSource: m.message_source || null,
-      raw: m.raw || null,
-    };
-  });
+    }),
+  );
 
   return { items, hasMore };
 }
@@ -951,7 +261,11 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
   const EXPORT_CAP = getConfig().EXPORT_CSV_MAX_ROWS;
   const totalMatched = await conversations.countDocuments(match);
   const items = await conversations
-    .find(match)
+    .find(match, {
+      projection: {
+        messages: 0,
+      },
+    })
     .sort(sortSpec(filters))
     .limit(EXPORT_CAP)
     .toArray();
@@ -960,7 +274,12 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
   const userIds = [
     ...new Set(items.map((i) => i.primary_user_id).filter(Boolean)),
   ] as string[];
-  const userDocs = await users.find({ _id: { $in: userIds } }).toArray();
+  const userDocs = await users
+    .find(
+      { _id: { $in: userIds } },
+      { projection: { first_name: 1, last_name: 1, email: 1, phone: 1 } },
+    )
+    .toArray();
   const userMap = new Map(userDocs.map((u) => [u._id, u]));
 
   const headers = [
@@ -976,6 +295,7 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
     "group_id",
     "group",
     "user_id",
+    "user_ids",
     "user_name",
     "user_email",
     "user_phone",
@@ -989,75 +309,120 @@ export async function exportConversationsCsv(filters: ConversationFilters) {
     "csat_comment",
     "csat_submitted_at",
     "message_count",
+    "messages_truncated",
+    "has_attachment",
     "attachment_count",
+    "actor_user",
+    "actor_agent",
+    "actor_bot",
+    "actor_system",
     "first_response_seconds",
     "resolution_seconds",
     "response_time_seconds",
     "conversation_url",
     "preview",
+    "is_stub",
   ];
 
-  const escape = (v: unknown) => {
-    const s = v == null ? "" : String(v);
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-
-  const lines = [headers.join(",")];
+  const rows: unknown[][] = [];
   for (const c of items) {
     const u = c.primary_user_id ? userMap.get(c.primary_user_id) : null;
     const name = u
       ? [u.first_name, u.last_name].filter(Boolean).join(" ")
       : "";
-    const attachmentCount = (c.messages || []).reduce(
-      (n, m) => n + (m.attachments?.length || (m.has_attachment ? 1 : 0)),
-      0,
-    );
-    lines.push(
-      [
-        c._id,
-        c.created_at?.toISOString?.() || "",
-        c.last_message_at?.toISOString?.() || "",
-        c.resolved_at?.toISOString?.() || "",
-        c.resolved,
-        c.reopened,
-        c.status,
-        c.channel_id,
-        c.channel_name,
-        c.group_id,
-        c.group_name,
-        c.primary_user_id,
-        name,
-        u?.email,
-        u?.phone,
-        c.assigned_agent_id,
-        c.assigned_agent_name,
-        (c.agent_ids || []).join("|"),
-        c.resolution?.label,
-        c.resolution?.sub_label,
-        c.csat?.rating,
-        c.csat?.rating_raw,
-        c.csat?.comment,
-        c.csat?.submitted_at?.toISOString?.() || "",
-        c.message_count,
-        attachmentCount,
-        c.metrics?.first_response_time_seconds,
-        c.metrics?.resolution_time_seconds,
-        c.metrics?.response_time_seconds,
-        c.conversation_url,
-        c.messages.find((m) => m.actor_type === "user")?.text || "",
-      ]
-        .map(escape)
-        .join(","),
-    );
+    rows.push([
+      c._id,
+      c.created_at?.toISOString?.() || "",
+      c.last_message_at?.toISOString?.() || "",
+      c.resolved_at?.toISOString?.() || "",
+      c.resolved,
+      c.reopened,
+      c.status,
+      c.channel_id,
+      c.channel_name,
+      c.group_id,
+      c.group_name,
+      c.primary_user_id,
+      (c.user_ids || []).join("|"),
+      name,
+      u?.email,
+      u?.phone,
+      c.assigned_agent_id,
+      c.assigned_agent_name,
+      (c.agent_ids || []).join("|"),
+      c.resolution?.label,
+      c.resolution?.sub_label,
+      c.csat?.rating,
+      c.csat?.rating_raw,
+      c.csat?.comment,
+      c.csat?.submitted_at?.toISOString?.() || "",
+      c.message_count,
+      c.messages_truncated,
+      c.has_attachment,
+      c.attachment_count ?? 0,
+      c.actor_counts?.user ?? 0,
+      c.actor_counts?.agent ?? 0,
+      c.actor_counts?.bot ?? 0,
+      c.actor_counts?.system ?? 0,
+      c.metrics?.first_response_time_seconds,
+      c.metrics?.resolution_time_seconds,
+      c.metrics?.response_time_seconds,
+      c.conversation_url,
+      c.preview_text || "",
+      c.is_stub,
+    ]);
   }
 
   return {
-    csv: lines.join("\n"),
+    csv: toCsv(headers, rows),
     exported: items.length,
     totalMatched,
     truncated,
     cap: EXPORT_CAP,
+  };
+}
+
+/** One CSV row per message, including every Freshchat CSV column from `messages.raw`. */
+export async function exportMessagesCsv(
+  filters: ConversationFilters,
+  opts?: { conversationId?: string },
+) {
+  const { conversations } = await collections();
+  const match = opts?.conversationId
+    ? { _id: opts.conversationId }
+    : await matchFor({ ...filters, page: 1, limit: 25 });
+  const EXPORT_CAP = getConfig().EXPORT_CSV_MAX_ROWS;
+  const convos = await conversations
+    .find(match)
+    .sort(opts?.conversationId ? { _id: 1 } : sortSpec(filters))
+    .limit(opts?.conversationId ? 1 : EXPORT_CAP)
+    .toArray();
+
+  const convMatched = opts?.conversationId
+    ? convos.length
+    : await conversations.countDocuments(match);
+  const truncated = !opts?.conversationId && convMatched > convos.length;
+
+  const allMessages = convos.flatMap((c) => c.messages || []);
+  const rawKeys = collectRawColumnKeys(allMessages);
+  const headers = messageExportHeaders(rawKeys);
+
+  const rows: unknown[][] = [];
+  let messageRows = 0;
+  for (const c of convos) {
+    for (const m of c.messages || []) {
+      rows.push(messageExportRow(c, m, rawKeys));
+      messageRows++;
+    }
+  }
+
+  return {
+    csv: toCsv(headers, rows),
+    exported: messageRows,
+    totalMatched: messageRows,
+    truncated,
+    cap: EXPORT_CAP,
+    conversations: convos.length,
   };
 }
 

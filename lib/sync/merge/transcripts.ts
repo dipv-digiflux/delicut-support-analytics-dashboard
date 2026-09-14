@@ -7,6 +7,7 @@ import { getField } from "@/lib/parse/csv";
 import { parseUtcDate } from "@/lib/normalize/dates";
 import { parseMessageParts, normalizeText } from "@/lib/normalize/text";
 import { mapActorType } from "@/lib/normalize/ids";
+import { computeMessageRollup } from "@/lib/conversation-stats";
 import type {
   Conversation,
   EmbeddedMessage,
@@ -219,7 +220,12 @@ export async function mergeTranscriptRows(
       messages,
     });
 
-    if (prev?.sources?.transcript?.hash === hash) {
+    // Keep all Freshchat columns on messages. If hash matches but raw was
+    // stripped earlier, still rewrite so we never lose source fields.
+    const prevMissingRaw = (prev?.messages || []).some(
+      (msg: EmbeddedMessage) => !msg.raw,
+    );
+    if (prev?.sources?.transcript?.hash === hash && !prevMissingRaw) {
       counters.conversations_unchanged++;
       continue;
     }
@@ -230,6 +236,8 @@ export async function mergeTranscriptRows(
 
     const prevCount = prev?.messages?.length || 0;
     counters.messages_added += Math.max(0, messages.length - prevCount);
+
+    const rollup = computeMessageRollup(messages);
 
     ops.push({
       updateOne: {
@@ -249,6 +257,10 @@ export async function mergeTranscriptRows(
             messages,
             message_count: messages.length,
             messages_truncated: truncated,
+            has_attachment: rollup.has_attachment,
+            attachment_count: rollup.attachment_count,
+            actor_counts: rollup.actor_counts,
+            preview_text: rollup.preview_text,
             is_stub: false,
             stub_reason: null,
             updated_at: now,

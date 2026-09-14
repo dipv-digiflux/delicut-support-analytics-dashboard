@@ -4,6 +4,8 @@ How Freshchat can send us data, **what we actually use**, how webhooks fit, and 
 
 Related: [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md) · [SYNC.md](./SYNC.md) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) · [FRESHCHAT_ADMIN_CHECKLIST.md](./FRESHCHAT_ADMIN_CHECKLIST.md)
 
+**In the app:** open **Data flow** in the sidebar (`/data-flow`) — same picture on one page (pipes, Extract events currently synced, what each screen reads, what we will not get).
+
 ---
 
 ## Verdict (read this first)

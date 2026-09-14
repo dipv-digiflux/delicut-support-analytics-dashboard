@@ -7,6 +7,7 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", icon: "▣" },
   { href: "/conversations", label: "Conversations", icon: "☰" },
   { href: "/users", label: "Customers", icon: "☺" },
+  { href: "/data-flow", label: "Data flow", icon: "⇄" },
 ];
 
 export function SidebarNav() {

@@ -47,7 +47,7 @@ const ConfigSchema = z.object({
   MONGODB_URI: z.string().default("mongodb://127.0.0.1:27017"),
   /** Mongo database name for analytics warehouse */
   MONGODB_DB: z.string().default("freshchat_analytics"),
-  MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(10),
+  MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(24),
   MONGODB_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
 
   // --- Product / UI (defaults; optional env override) ---

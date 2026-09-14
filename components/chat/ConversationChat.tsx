@@ -157,7 +157,7 @@ export function ConversationChat({
                 Customer chat
               </Link>
             )}
-            <RawJsonButton data={conversation.raw || conversation} />
+            <RawJsonButton href={`/api/conversations/${conversation.id}`} />
           </div>
         </div>
 

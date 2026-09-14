@@ -32,6 +32,8 @@ export async function ensureIndexes(db: Db): Promise<void> {
     { key: { "messages.message_id": 1 } },
     // Date-range KPIs that filter resolved_at + created_at together
     { key: { resolved: 1, resolved_at: -1 } },
+    // Denormalized attachment filter for KPI attachmentRate
+    { key: { has_attachment: 1, created_at: -1 } },
   ]);
 
   const users = db.collection("users");

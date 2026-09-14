@@ -1,12 +1,19 @@
 import { collections } from "@/lib/db/client";
 import { getConfig } from "@/lib/config";
-import type { EmbeddedAttachment } from "@/lib/db/types";
+import type { EmbeddedMessage } from "@/lib/db/types";
 import { parseChannel } from "@/lib/display/channel";
 import {
   buildConversationMatch,
   customerMongoSort,
   type ConversationFilters,
 } from "@/lib/filters";
+import {
+  collectRawColumnKeys,
+  mapChatMessage,
+  messageExportHeaders,
+  messageExportRow,
+  toCsv,
+} from "@/lib/export-messages";
 
 function displayName(u: {
   first_name?: string | null;
@@ -316,9 +323,11 @@ export interface ChatMessageRow {
   actorId: string | null;
   actorName: string | null;
   actorEmail: string | null;
+  messageType?: string | null;
+  detailedMessageType?: string | null;
   text: string;
   hasAttachment: boolean;
-  attachments: EmbeddedAttachment[];
+  attachments: EmbeddedMessage["attachments"];
   channelName: string | null;
   channelId: string | null;
   messageSource: string | null;
@@ -384,59 +393,15 @@ export async function listCustomerMessages(opts: {
   const hasMore = rows.length > limit;
   const slice = rows.slice(0, limit);
 
-  const items: ChatMessageRow[] = slice.map((r) => {
-    const m = r.message as {
-      message_id: string;
-      created_at: Date;
-      actor_type: string;
-      actor_id: string | null;
-      actor_email?: string | null;
-      actor_first_name?: string | null;
-      actor_last_name?: string | null;
-      text: string;
-      has_attachment: boolean;
-      attachments?: EmbeddedAttachment[];
-      message_source?: string | null;
-      raw?: Record<string, string>;
-    };
-    const actorName = [m.actor_first_name, m.actor_last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    return {
-      messageId: m.message_id,
+  const items: ChatMessageRow[] = slice.map((r) => ({
+    ...mapChatMessage(r.message as EmbeddedMessage, {
       conversationId: r.conversationId as string,
-      createdAt: m.created_at,
-      actorType: m.actor_type,
-      actorId: m.actor_id,
-      actorName: actorName || null,
-      actorEmail: m.actor_email || null,
-      text: m.text,
-      hasAttachment: m.has_attachment,
-      attachments: m.attachments || [],
       channelName: (r.channelName as string) || null,
       channelId: (r.channelId as string) || null,
-      messageSource: m.message_source || null,
-      raw: m.raw || null,
-    };
-  });
+    }),
+  }));
 
   return { items, hasMore };
-}
-
-function csvEscape(v: unknown): string {
-  const s = v == null ? "" : String(v);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function toCsv(headers: string[], rows: unknown[][]): string {
-  const lines = [headers.join(",")];
-  for (const row of rows) {
-    lines.push(row.map(csvEscape).join(","));
-  }
-  // Excel-friendly UTF-8 BOM
-  return `\uFEFF${lines.join("\r\n")}`;
 }
 
 /** Exact CSV of all customers matching filters (no row cap). */
@@ -624,7 +589,7 @@ export async function exportCustomersCsv(
   };
 }
 
-/** Exact CSV of one customer's messages (chat transcript). */
+/** Exact CSV of one customer's messages (chat transcript + Freshchat raw columns). */
 export async function exportCustomerChatCsv(opts: {
   userId: string;
   from?: string;
@@ -649,92 +614,34 @@ export async function exportCustomerChatCsv(opts: {
     match.created_at = range;
   }
 
-  const rows = await conversations
-    .aggregate([
-      { $match: match },
-      { $unwind: "$messages" },
-      { $sort: { "messages.created_at": 1, "messages.message_id": 1 } },
-      {
-        $project: {
-          conversationId: "$_id",
-          channelName: "$channel_name",
-          channelId: "$channel_id",
-          assignedAgentId: "$assigned_agent_id",
-          assignedAgentName: "$assigned_agent_name",
-          message: "$messages",
-        },
-      },
-    ])
-    .toArray();
-
+  const convos = await conversations.find(match).sort({ created_at: 1 }).toArray();
+  const allMessages = convos.flatMap((c) => c.messages || []);
+  const rawKeys = collectRawColumnKeys(allMessages);
   const headers = [
     "user_id",
     "user_name",
     "user_email",
     "user_phone",
-    "conversation_id",
-    "channel_id",
-    "channel",
-    "assigned_agent_id",
-    "assigned_agent_name",
-    "message_id",
-    "created_at",
-    "actor_type",
-    "actor_id",
-    "actor_name",
-    "actor_email",
-    "message_source",
-    "text",
-    "has_attachment",
-    "attachment_count",
-    "attachment_names",
-    "attachment_urls",
+    ...messageExportHeaders(rawKeys),
   ];
 
   const userName = u ? displayName(u) : opts.userId;
-  const data = rows.map((r) => {
-    const m = r.message as {
-      message_id: string;
-      created_at: Date;
-      actor_type: string;
-      actor_id: string | null;
-      actor_email?: string | null;
-      actor_first_name?: string | null;
-      actor_last_name?: string | null;
-      text: string;
-      has_attachment: boolean;
-      message_source?: string | null;
-      attachments?: { file_name?: string | null; url?: string | null }[];
-    };
-    const actorName = [m.actor_first_name, m.actor_last_name]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    const atts = m.attachments || [];
-    return [
-      opts.userId,
-      userName,
-      u?.email ?? "",
-      u?.phone ?? "",
-      r.conversationId,
-      r.channelId,
-      r.channelName,
-      r.assignedAgentId,
-      r.assignedAgentName,
-      m.message_id,
-      m.created_at?.toISOString?.() || "",
-      m.actor_type,
-      m.actor_id,
-      actorName,
-      m.actor_email,
-      m.message_source,
-      m.text,
-      m.has_attachment,
-      atts.length,
-      atts.map((a) => a.file_name || "").join("|"),
-      atts.map((a) => a.url || "").join("|"),
-    ];
-  });
+  const data: unknown[][] = [];
+  for (const c of convos) {
+    const msgs = [...(c.messages || [])].sort((a, b) => {
+      const t = a.created_at.getTime() - b.created_at.getTime();
+      return t !== 0 ? t : a.message_id.localeCompare(b.message_id);
+    });
+    for (const m of msgs) {
+      data.push([
+        opts.userId,
+        userName,
+        u?.email ?? "",
+        u?.phone ?? "",
+        ...messageExportRow(c, m, rawKeys),
+      ]);
+    }
+  }
 
   return {
     csv: toCsv(headers, data),

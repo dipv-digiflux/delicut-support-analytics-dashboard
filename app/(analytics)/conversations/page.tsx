@@ -48,7 +48,13 @@ export default async function ConversationsPage({
             </p>
           </div>
         </div>
-        <ExportButton query={qs} label="Export CSV" />
+        <div className="flex flex-wrap items-end gap-2">
+          <ExportButton query={qs} label="Export conversations" />
+          <ExportButton
+            query={`${qs}${qs ? "&" : ""}kind=messages`}
+            label="Export messages (raw)"
+          />
+        </div>
       </div>
 
       <Suspense fallback={null}>

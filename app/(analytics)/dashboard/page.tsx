@@ -48,8 +48,7 @@ export default async function DashboardPage({
   let error: string | null = null;
 
   try {
-    data = await getKpis(filters);
-    sync = await getSyncStatus();
+    [data, sync] = await Promise.all([getKpis(filters), getSyncStatus()]);
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
@@ -76,6 +75,10 @@ export default async function DashboardPage({
           <p className="text-sm text-[var(--muted)]">
             {filters.from} → {filters.to} ({timezoneLabel(filters.timeZone)}) ·{" "}
             {cfg.APP_BRAND_NAME}
+            {" · "}
+            <Link href="/data-flow" className="text-[var(--brand)] hover:underline">
+              Data flow
+            </Link>
           </p>
         </div>
       </div>
