@@ -133,14 +133,14 @@ export function buildChatInsights(
         quotes: [],
       };
       cur.count += 1;
-      if (cur.quotes.length < 3) cur.quotes.push(clipQuote(opener.text));
+      if (cur.quotes.length < 4) cur.quotes.push(clipQuote(opener.text));
       themeBuckets.set(entry.key, cur);
     }
   }
 
   const probed = [...themeBuckets.values()]
     .sort((a, b) => b.count - a.count)
-    .slice(0, 6)
+    .slice(0, 8)
     .map((b) => ({
       key: b.entry.key,
       title: b.entry.label,
@@ -152,7 +152,7 @@ export function buildChatInsights(
     }));
 
   const bySubject = new Map(data.breakdowns.bySubject.map((s) => [s.id, s]));
-  const tagged = (voice?.subjectSamples || []).slice(0, 6).map(
+  const tagged = (voice?.subjectSamples || []).slice(0, 8).map(
     (s: {
       id: string;
       name: string;

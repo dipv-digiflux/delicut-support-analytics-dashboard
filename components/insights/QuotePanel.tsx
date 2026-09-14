@@ -3,18 +3,20 @@ import type { ChatInsightModel } from "@/lib/insights/themes";
 
 export function QuotePanel({
   quotes,
+  title = "In their words",
+  tip = "CSAT comments from this filter. Click to open the chat.",
 }: {
   quotes: ChatInsightModel["quotes"];
+  title?: string;
+  tip?: string;
 }) {
   if (quotes.length === 0) return null;
   return (
     <div className="mb-6">
       <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-        In their words
+        {title}
       </h2>
-      <p className="mb-3 text-xs text-[var(--muted)]">
-        CSAT comments from this filter. Click to open the chat.
-      </p>
+      <p className="mb-3 text-xs text-[var(--muted)]">{tip}</p>
       <div className="grid gap-2 md:grid-cols-2">
         {quotes.map((q) => (
           <Link

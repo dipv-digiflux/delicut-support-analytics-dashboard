@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { SectionTitle } from "@/components/KpiTile";
+import { fmtPct } from "@/lib/format-kpi";
 import type { VoiceCard } from "@/lib/insights/themes";
 
 export function ProblemBoard({
@@ -14,10 +16,7 @@ export function ProblemBoard({
 }) {
   return (
     <div className="mb-6">
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-        {title}
-      </h2>
-      {tip && <p className="mb-3 text-xs text-[var(--muted)]">{tip}</p>}
+      <SectionTitle tip={tip}>{title}</SectionTitle>
       {cards.length === 0 ? (
         <p className="rounded-lg border border-[var(--border)] bg-white px-4 py-6 text-sm text-slate-500">
           {empty}
@@ -38,6 +37,7 @@ export function ProblemBoard({
                 </h3>
                 <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
                   {card.count.toLocaleString()}
+                  {card.share != null ? ` · ${fmtPct(card.share)}` : ""}
                 </span>
               </div>
               <p className="text-xs text-slate-600">{card.why}</p>

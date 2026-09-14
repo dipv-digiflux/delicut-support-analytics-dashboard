@@ -4,6 +4,10 @@ import { getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
 import { buildInsightActions } from "@/lib/insights/actions";
+import {
+  buildChiefBriefing,
+  emptyBriefing,
+} from "@/lib/insights/briefing";
 import { buildChatInsights } from "@/lib/insights/themes";
 import { isInsightPersona } from "@/lib/insights/persona-config";
 
@@ -37,6 +41,9 @@ export default async function InsightsPersonaPage({
   const insights = data
     ? buildChatInsights(data, filters)
     : { sampled: 0, probed: [], tagged: [], quotes: [] };
+  const briefing = data
+    ? buildChiefBriefing(persona, data, insights, filters)
+    : emptyBriefing(persona);
   const cfg = getConfig();
 
   return (
@@ -46,6 +53,7 @@ export default async function InsightsPersonaPage({
       brandName={cfg.APP_BRAND_NAME}
       data={data}
       insights={insights}
+      briefing={briefing}
       sync={sync}
       error={error}
       actions={actions}

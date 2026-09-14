@@ -16,13 +16,13 @@ export const PERSONA_COPY: Record<
   cx: {
     title: "Experience",
     question:
-      "What customers are typing, how we tagged it, and where ops should act.",
-    tip: "Built from customer openers and Freshchat labels in this filter — not a repeat of the Dashboard chart grid.",
+      "view: queue, real asks, breaks, unlabeled work.",
+    tip: "Walk the briefing first — those are the five checks. Then read the chats, not Dashboard charts.",
   },
   marketing: {
     title: "Demand",
     question:
-      "What demand is hitting chat, in customers’ words, and what that does to brand.",
-    tip: "Opener themes, labels, and CSAT comments for this filter — not a repeat of the Dashboard chart grid.",
+      "Chief Marketing Officer view: demand mix, churn talk, channel, brand CSAT.",
+    tip: "Walk the briefing first — those are the five checks. Then read demand and comments, not Dashboard charts.",
   },
 };
