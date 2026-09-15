@@ -2,10 +2,9 @@ import { Suspense } from "react";
 import { listCustomers } from "@/lib/customers";
 import { getConfig } from "@/lib/config";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
-import { filtersToQuery, CUSTOMER_SORT_KEYS } from "@/lib/filters";
+import { CUSTOMER_SORT_KEYS } from "@/lib/filters";
 import { timezoneLabel } from "@/lib/timezone";
 import { FilterBar } from "@/components/FilterBar";
-import { ExportButton } from "@/components/ExportButton";
 import { PaginationBar } from "@/components/ui/PaginationBar";
 import { CustomersTable } from "@/components/customers/CustomersTable";
 import { InfoTip } from "@/components/ui/InfoTip";
@@ -34,8 +33,6 @@ export default async function UsersPage({
     error = err instanceof Error ? err.message : String(err);
   }
 
-  const qs = filtersToQuery(customerFilters);
-
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -50,7 +47,7 @@ export default async function UsersPage({
           <div>
             <h1 className="flex items-center text-2xl font-bold text-[var(--brand-ink)]">
               Customers
-              <InfoTip text="Customers who appear in conversations matching the filters. Open a row for chat history. Export CSV downloads every matching customer (exact, no row cap)." />
+              <InfoTip text="Customers who appear in conversations matching the filters. Open a row for chat history." />
             </h1>
             <p className="text-sm text-[var(--muted)]">
               {filters.from} → {filters.to} ({timezoneLabel(filters.timeZone)}) ·
@@ -58,11 +55,6 @@ export default async function UsersPage({
             </p>
           </div>
         </div>
-        <ExportButton
-          endpoint="/api/customers/export"
-          query={qs}
-          label="Export CSV (exact)"
-        />
       </div>
 
       <Suspense
