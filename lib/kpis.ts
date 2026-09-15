@@ -1,5 +1,8 @@
 import { collections } from "@/lib/db/client";
-import { KPI_PROJECT } from "@/lib/conversation-stats";
+import {
+  KPI_DASHBOARD_PROJECT,
+  KPI_VOICE_PROJECT,
+} from "@/lib/conversation-stats";
 import {
   buildConversationMatch,
   type ConversationFilters,
@@ -95,6 +98,41 @@ function mapDimRows(
   });
 }
 
+function ratingBucket(n: number) {
+  const bounds =
+    n < 5
+      ? [
+          { $gte: ["$csat.rating", n] },
+          { $lt: ["$csat.rating", n + 1] },
+        ]
+      : [{ $gte: ["$csat.rating", 5] }];
+  return {
+    $sum: {
+      $cond: [{ $and: [HAS_CSAT_RATING, ...bounds] }, 1, 0],
+    },
+  };
+}
+
+function metricBucket(
+  field:
+    | "$metrics.first_response_time_seconds"
+    | "$metrics.resolution_time_seconds",
+  min: number,
+  max: number | null,
+) {
+  const bounds =
+    max == null
+      ? [{ $gte: [field, min] }]
+      : [{ $gte: [field, min] }, { $lt: [field, max] }];
+  return {
+    $sum: {
+      $cond: [{ $and: [{ $ne: [field, null] }, ...bounds] }, 1, 0],
+    },
+  };
+}
+
+const AGG_OPTS = { allowDiskUse: true, maxTimeMS: 120_000 } as const;
+
 async function matchFor(filters: ConversationFilters) {
   const searchUserIds = filters.q?.trim()
     ? await resolveSearchUserIds(filters.q)
@@ -116,7 +154,7 @@ function voiceFacetBranches() {
   return {
     recentOpeners: [
       { $match: { preview_text: { $type: "string" as const, $ne: "" } } },
-      { $limit: 400 },
+      { $limit: 150 },
       {
         $project: {
           text: "$preview_text",
@@ -171,7 +209,9 @@ export async function getKpis(
     .aggregate(
       [
         { $match: match },
-        { $project: KPI_PROJECT },
+        {
+          $project: opts.voice ? KPI_VOICE_PROJECT : KPI_DASHBOARD_PROJECT,
+        },
         {
           $facet: {
             stats: [
@@ -283,6 +323,71 @@ export async function getKpis(
                       ],
                     },
                   },
+                  csat1: ratingBucket(1),
+                  csat2: ratingBucket(2),
+                  csat3: ratingBucket(3),
+                  csat4: ratingBucket(4),
+                  csat5: ratingBucket(5),
+                  frtLt1m: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    0,
+                    60,
+                  ),
+                  frtLt5m: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    60,
+                    300,
+                  ),
+                  frtLt15m: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    300,
+                    900,
+                  ),
+                  frtLt60m: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    900,
+                    3600,
+                  ),
+                  frtLt4h: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    3600,
+                    14400,
+                  ),
+                  frtGt4h: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    14400,
+                    null,
+                  ),
+                  resLt15m: metricBucket(
+                    "$metrics.resolution_time_seconds",
+                    0,
+                    900,
+                  ),
+                  resLt60m: metricBucket(
+                    "$metrics.resolution_time_seconds",
+                    900,
+                    3600,
+                  ),
+                  resLt4h: metricBucket(
+                    "$metrics.resolution_time_seconds",
+                    3600,
+                    14400,
+                  ),
+                  resLt24h: metricBucket(
+                    "$metrics.resolution_time_seconds",
+                    14400,
+                    86400,
+                  ),
+                  resLt3d: metricBucket(
+                    "$metrics.resolution_time_seconds",
+                    86400,
+                    259200,
+                  ),
+                  resGt3d: metricBucket(
+                    "$metrics.resolution_time_seconds",
+                    259200,
+                    null,
+                  ),
                 },
               },
             ],
@@ -291,17 +396,25 @@ export async function getKpis(
               { $match: { _id: { $nin: [null, ""] } } },
               { $count: "n" },
             ],
-            dailyVolume: [
+            volumeCells: [
               { $match: { created_at: { $ne: null } } },
               {
                 $group: {
                   _id: {
-                    $dateToString: { format: "%Y-%m-%d", date: "$created_at" },
+                    day: {
+                      $dateToString: {
+                        format: "%Y-%m-%d",
+                        date: "$created_at",
+                      },
+                    },
+                    dow: {
+                      $dayOfWeek: { date: "$created_at", timezone: tz },
+                    },
+                    hour: { $hour: { date: "$created_at", timezone: tz } },
                   },
                   count: { $sum: 1 },
                 },
               },
-              { $sort: { _id: 1 } },
             ],
             dailyResolved: [
               { $match: { resolved: true, resolved_at: { $ne: null } } },
@@ -331,11 +444,6 @@ export async function getKpis(
               },
               { $sort: { _id: 1 } },
             ],
-            csatDistribution: [
-              { $match: { "csat.rating": { $ne: null } } },
-              { $group: { _id: "$csat.rating", count: { $sum: 1 } } },
-              { $sort: { _id: 1 } },
-            ],
             subjectDeep: dimPipeline({
               id: {
                 $cond: [
@@ -362,21 +470,6 @@ export async function getKpis(
                 ],
               },
             }),
-            averageCsatByAgent: [
-              { $match: { "csat.rating": { $ne: null } } },
-              {
-                $group: {
-                  _id: {
-                    id: { $ifNull: ["$assigned_agent_id", "unassigned"] },
-                    name: { $ifNull: ["$assigned_agent_name", "Unassigned"] },
-                  },
-                  average: { $avg: "$csat.rating" },
-                  ratedCount: { $sum: 1 },
-                },
-              },
-              { $sort: { average: -1 } },
-              { $limit: 15 },
-            ],
             channelDeep: dimPipeline({
               id: { $literal: null },
               name: { $ifNull: ["$channel_name", "Unknown"] },
@@ -389,57 +482,6 @@ export async function getKpis(
               id: { $ifNull: ["$group_id", "none"] },
               name: { $ifNull: ["$group_name", "No group"] },
             }),
-            volumeHeatmap: [
-              { $match: { created_at: { $ne: null } } },
-              {
-                $group: {
-                  _id: {
-                    dow: { $dayOfWeek: { date: "$created_at", timezone: tz } },
-                    hour: { $hour: { date: "$created_at", timezone: tz } },
-                  },
-                  count: { $sum: 1 },
-                },
-              },
-            ],
-            frtBuckets: [
-              { $match: { "metrics.first_response_time_seconds": { $ne: null } } },
-              {
-                $bucket: {
-                  groupBy: "$metrics.first_response_time_seconds",
-                  boundaries: [0, 60, 300, 900, 3600, 14400, 99999999],
-                  default: "other",
-                  output: { count: { $sum: 1 } },
-                },
-              },
-            ],
-            resolveBuckets: [
-              { $match: { "metrics.resolution_time_seconds": { $ne: null } } },
-              {
-                $bucket: {
-                  groupBy: "$metrics.resolution_time_seconds",
-                  boundaries: [0, 900, 3600, 14400, 86400, 259200, 99999999],
-                  default: "other",
-                  output: { count: { $sum: 1 } },
-                },
-              },
-            ],
-            csatByChannel: [
-              {
-                $match: {
-                  "csat.rating": { $ne: null },
-                  channel_name: { $ne: null },
-                },
-              },
-              {
-                $group: {
-                  _id: "$channel_name",
-                  average: { $avg: "$csat.rating" },
-                  ratedCount: { $sum: 1 },
-                },
-              },
-              { $sort: { ratedCount: -1 } },
-              { $limit: 10 },
-            ],
             labelTrend: [
               { $match: { created_at: { $ne: null } } },
               {
@@ -483,7 +525,7 @@ export async function getKpis(
           },
         },
       ],
-      { allowDiskUse: true },
+      AGG_OPTS,
     )
     .toArray();
 
@@ -512,19 +554,31 @@ export async function getKpis(
     : null;
 
   const dailyResolved = facet?.dailyResolved || [];
-  const dailyVolume = facet?.dailyVolume || [];
   const resolvedByDay = new Map<string, number>(
     dailyResolved.map((d: { _id: string; resolved: number }) => [
       String(d._id),
       Number(d.resolved),
     ]),
   );
-  const createdByDay = new Map<string, number>(
-    dailyVolume.map((d: { _id: string; count: number }) => [
-      String(d._id),
-      Number(d.count),
-    ]),
-  );
+  const createdByDay = new Map<string, number>();
+  const heatmapAcc = new Map<string, { weekday: number; hour: number; count: number }>();
+  for (const r of (facet?.volumeCells || []) as {
+    _id: { day: string; dow: number; hour: number };
+    count: number;
+  }[]) {
+    const day = String(r._id.day);
+    createdByDay.set(day, (createdByDay.get(day) || 0) + Number(r.count));
+    const mongoDow = Number(r._id.dow);
+    const weekday = mongoDow === 1 ? 6 : mongoDow - 2;
+    const hour = Number(r._id.hour);
+    const key = `${weekday}-${hour}`;
+    const prev = heatmapAcc.get(key);
+    heatmapAcc.set(key, {
+      weekday,
+      hour,
+      count: (prev?.count || 0) + Number(r.count),
+    });
+  }
   const allDays = [
     ...new Set([...createdByDay.keys(), ...resolvedByDay.keys()]),
   ].sort();
@@ -533,46 +587,7 @@ export async function getKpis(
     count: Number(createdByDay.get(date) || 0),
     resolved: Number(resolvedByDay.get(date) || 0),
   }));
-
-  const FRT_BUCKET_LABELS = [
-    { key: 0, label: "<1m" },
-    { key: 60, label: "1–5m" },
-    { key: 300, label: "5–15m" },
-    { key: 900, label: "15–60m" },
-    { key: 3600, label: "1–4h" },
-    { key: 14400, label: ">4h" },
-  ];
-  const RES_BUCKET_LABELS = [
-    { key: 0, label: "<15m" },
-    { key: 900, label: "15–60m" },
-    { key: 3600, label: "1–4h" },
-    { key: 14400, label: "4–24h" },
-    { key: 86400, label: "1–3d" },
-    { key: 259200, label: ">3d" },
-  ];
-
-  const frtBucketsRaw = facet?.frtBuckets || [];
-  const resolveBucketsRaw = facet?.resolveBuckets || [];
-  const frtMap = new Map<number | string, number>(
-    frtBucketsRaw.map((b: { _id: number | string; count: number }) => [
-      b._id,
-      Number(b.count),
-    ]),
-  );
-  const resMap = new Map<number | string, number>(
-    resolveBucketsRaw.map((b: { _id: number | string; count: number }) => [
-      b._id,
-      Number(b.count),
-    ]),
-  );
-
-  const heatmapCells = (facet?.volumeHeatmap || []).map(
-    (r: { _id: { dow: number; hour: number }; count: number }) => {
-      const mongoDow = Number(r._id.dow);
-      const weekday = mongoDow === 1 ? 6 : mongoDow - 2;
-      return { weekday, hour: Number(r._id.hour), count: r.count };
-    },
-  );
+  const heatmapCells = [...heatmapAcc.values()];
 
   const labelTrendRaw = facet?.labelTrend || [];
   const labelTotals = new Map<string, number>();
@@ -623,9 +638,21 @@ export async function getKpis(
   const groupDeep = mapDimRows(facet?.groupDeep || []);
   const subjectDeep = mapDimRows(facet?.subjectDeep || []);
   const dailyCsat = facet?.dailyCsat || [];
-  const csatDistribution = facet?.csatDistribution || [];
-  const averageCsatByAgent = facet?.averageCsatByAgent || [];
-  const csatByChannelRaw = facet?.csatByChannel || [];
+  const csatDistribution = [
+    { rating: 1, count: Number(stats?.csat1 || 0) },
+    { rating: 2, count: Number(stats?.csat2 || 0) },
+    { rating: 3, count: Number(stats?.csat3 || 0) },
+    { rating: 4, count: Number(stats?.csat4 || 0) },
+    { rating: 5, count: Number(stats?.csat5 || 0) },
+  ];
+  const averageCsatByAgent = [...agentDeep]
+    .filter((a) => a.rated > 0 && a.avgCsat != null)
+    .sort((a, b) => (b.avgCsat || 0) - (a.avgCsat || 0))
+    .slice(0, 15);
+  const csatByChannelRaw = [...channelDeep]
+    .filter((c) => c.rated > 0 && c.avgCsat != null)
+    .sort((a, b) => b.rated - a.rated)
+    .slice(0, 10);
 
   return {
     kpis: {
@@ -666,12 +693,7 @@ export async function getKpis(
         average: Number(d.average?.toFixed?.(2) ?? d.average),
         ratedCount: d.ratedCount,
       })),
-      csatDistribution: [1, 2, 3, 4, 5].map((rating) => ({
-        rating,
-        count:
-          csatDistribution.find((x: { _id: number }) => x._id === rating)?.count ||
-          0,
-      })),
+      csatDistribution,
       bySubject: subjectDeep.slice(0, 15).map((s) => ({
         subject: s.id,
         label: s.name,
@@ -681,44 +703,44 @@ export async function getKpis(
         channel: c.name,
         count: c.conversations,
       })),
-      averageCsatByAgent: averageCsatByAgent.map(
-        (a: {
-          _id: { id: string; name: string };
-          average: number;
-          ratedCount: number;
-        }) => ({
-          agentId: a._id.id,
-          agentName: a._id.name,
-          average: Number(a.average?.toFixed?.(2) ?? a.average),
-          ratedCount: a.ratedCount,
-        }),
-      ),
+      averageCsatByAgent: averageCsatByAgent.map((a) => ({
+        agentId: a.id,
+        agentName: a.name,
+        average: Number(a.avgCsat?.toFixed?.(2) ?? a.avgCsat),
+        ratedCount: a.rated,
+      })),
       agentVolume: agentDeep.slice(0, 15).map((a) => ({
         agentId: a.id,
         agentName: a.name,
         count: a.conversations,
       })),
       volumeHeatmap: heatmapCells,
-      frtDistribution: FRT_BUCKET_LABELS.map((b) => ({
-        bucket: b.label,
-        count: Number(frtMap.get(b.key) || 0),
-      })),
-      resolutionDistribution: RES_BUCKET_LABELS.map((b) => ({
-        bucket: b.label,
-        count: Number(resMap.get(b.key) || 0),
-      })),
+      frtDistribution: [
+        { bucket: "<1m", count: Number(stats?.frtLt1m || 0) },
+        { bucket: "1–5m", count: Number(stats?.frtLt5m || 0) },
+        { bucket: "5–15m", count: Number(stats?.frtLt15m || 0) },
+        { bucket: "15–60m", count: Number(stats?.frtLt60m || 0) },
+        { bucket: "1–4h", count: Number(stats?.frtLt4h || 0) },
+        { bucket: ">4h", count: Number(stats?.frtGt4h || 0) },
+      ],
+      resolutionDistribution: [
+        { bucket: "<15m", count: Number(stats?.resLt15m || 0) },
+        { bucket: "15–60m", count: Number(stats?.resLt60m || 0) },
+        { bucket: "1–4h", count: Number(stats?.resLt4h || 0) },
+        { bucket: "4–24h", count: Number(stats?.resLt24h || 0) },
+        { bucket: "1–3d", count: Number(stats?.resLt3d || 0) },
+        { bucket: ">3d", count: Number(stats?.resGt3d || 0) },
+      ],
       actorShare,
       resolvedMix: [
         { status: "Resolved", count: resolvedCount },
         { status: "Open", count: openCount },
       ].filter((r) => r.count > 0),
-      csatByChannel: csatByChannelRaw.map(
-        (c: { _id: string; average: number; ratedCount: number }) => ({
-          channel: String(c._id),
-          average: Number(c.average?.toFixed?.(2) ?? c.average),
-          ratedCount: c.ratedCount,
-        }),
-      ),
+      csatByChannel: csatByChannelRaw.map((c) => ({
+        channel: c.name,
+        average: Number(c.avgCsat?.toFixed?.(2) ?? c.avgCsat),
+        ratedCount: c.rated,
+      })),
       labelTrend,
     },
     breakdowns: {

@@ -88,7 +88,7 @@ const ConfigSchema = z.object({
    *      mongodb+srv://user:pass@cluster.mongodb.net/freshchat_analytics
    */
   MONGODB_URI: z.string().default(DEFAULT_MONGODB_URI),
-  MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(24),
+  MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(8),
   MONGODB_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
 
   // --- Product / UI (defaults; optional env override) ---

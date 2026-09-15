@@ -9,7 +9,7 @@ import { MixStrip } from "@/components/insights/MixStrip";
 import { PersonaTabs } from "@/components/insights/PersonaTabs";
 import { ProblemBoard } from "@/components/insights/ProblemBoard";
 import { QuotePanel } from "@/components/insights/QuotePanel";
-import { LabelTrendChart } from "@/components/charts/Charts";
+import { InsightsLabelTrend } from "@/components/insights/InsightsLabelTrend";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { conversationsHref } from "@/lib/dashboard-links";
 import { filtersToQuery, type ConversationFilters } from "@/lib/filters";
@@ -299,7 +299,7 @@ export function InsightsView({
         Rising queries
       </SectionTitle>
       <div className="mb-6">
-        <LabelTrendChart
+        <InsightsLabelTrend
           data={data?.charts.labelTrend || { days: [], series: [] }}
           baseQuery={baseQuery}
         />

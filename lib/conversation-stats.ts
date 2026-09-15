@@ -46,7 +46,37 @@ export function computeMessageRollup(messages: EmbeddedMessage[]): {
   };
 }
 
-/** Fields needed by dashboard KPI aggregations — excludes heavy `messages[]`. */
+/** Slim fields for dashboard KPI aggregations — no messages, comments, or previews. */
+export const KPI_DASHBOARD_PROJECT = {
+  primary_user_id: 1,
+  resolved: 1,
+  reopened: 1,
+  "csat.rating": 1,
+  "csat.submitted_at": 1,
+  "resolution.label": 1,
+  "derived.subject": 1,
+  message_count: 1,
+  "metrics.first_response_time_seconds": 1,
+  "metrics.resolution_time_seconds": 1,
+  channel_name: 1,
+  assigned_agent_id: 1,
+  assigned_agent_name: 1,
+  group_id: 1,
+  group_name: 1,
+  created_at: 1,
+  resolved_at: 1,
+  has_attachment: 1,
+  actor_counts: 1,
+} as const;
+
+/** Insights voice sample — preview + CSAT comment only when requested. */
+export const KPI_VOICE_PROJECT = {
+  ...KPI_DASHBOARD_PROJECT,
+  preview_text: 1,
+  "csat.comment": 1,
+} as const;
+
+/** Fields needed by list/KPI-adjacent reads — excludes heavy `messages[]`. */
 export const KPI_PROJECT = {
   primary_user_id: 1,
   resolved: 1,

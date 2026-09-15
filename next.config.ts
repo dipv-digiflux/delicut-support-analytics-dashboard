@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  compress: true,
+  experimental: {
+    optimizePackageImports: ["chart.js", "react-chartjs-2"],
+  },
   async headers() {
     return [
       {

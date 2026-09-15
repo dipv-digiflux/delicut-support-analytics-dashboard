@@ -62,22 +62,26 @@ export async function getDbCoverage(opts?: {
   const maxFailed = opts?.maxFailedList ?? 8;
   const maxAttempts = opts?.maxAttempts ?? 5;
 
-  const [convCount, userCount, agentCount, convBounds, rangeConvCount] =
+  const [convCount, userCount, agentCount, convMin, convMax, rangeConvCount] =
     await Promise.all([
       conversations.estimatedDocumentCount(),
       users.countDocuments({ role: "user" }),
       users.countDocuments({ role: { $in: ["agent"] } }),
       conversations
-        .aggregate<{ min: Date | null; max: Date | null }>([
-          {
-            $group: {
-              _id: null,
-              min: { $min: "$created_at" },
-              max: { $max: "$created_at" },
-            },
-          },
-          { $project: { _id: 0, min: 1, max: 1 } },
-        ])
+        .find(
+          { created_at: { $type: "date" } },
+          { projection: { created_at: 1 } },
+        )
+        .sort({ created_at: 1 })
+        .limit(1)
+        .next(),
+      conversations
+        .find(
+          { created_at: { $type: "date" } },
+          { projection: { created_at: 1 } },
+        )
+        .sort({ created_at: -1 })
+        .limit(1)
         .next(),
       opts?.since && opts?.until
         ? conversations.countDocuments({
@@ -85,6 +89,11 @@ export async function getDbCoverage(opts?: {
           })
         : Promise.resolve(0),
     ]);
+
+  const convBounds = {
+    min: convMin?.created_at ?? null,
+    max: convMax?.created_at ?? null,
+  };
 
   const collectionsReport: CollectionCoverage[] = [
     {

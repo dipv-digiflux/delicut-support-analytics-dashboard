@@ -23,7 +23,10 @@ export async function getMongoClient(): Promise<MongoClient> {
     if (!global.__freshchatMongoClient) {
       global.__freshchatMongoClient = new MongoClient(cfg.MONGODB_URI, {
         maxPoolSize: cfg.MONGODB_MAX_POOL_SIZE,
+        minPoolSize: 0,
+        maxIdleTimeMS: 30_000,
         serverSelectionTimeoutMS: cfg.MONGODB_TIMEOUT_MS,
+        socketTimeoutMS: 180_000,
       });
     }
     if (!clientPromise) {
@@ -35,7 +38,10 @@ export async function getMongoClient(): Promise<MongoClient> {
   if (!clientPromise) {
     const client = new MongoClient(cfg.MONGODB_URI, {
       maxPoolSize: cfg.MONGODB_MAX_POOL_SIZE,
+      minPoolSize: 0,
+      maxIdleTimeMS: 30_000,
       serverSelectionTimeoutMS: cfg.MONGODB_TIMEOUT_MS,
+      socketTimeoutMS: 180_000,
     });
     clientPromise = client.connect();
   }

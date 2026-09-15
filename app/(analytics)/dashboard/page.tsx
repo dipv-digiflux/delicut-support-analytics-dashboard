@@ -3,22 +3,7 @@ import Link from "next/link";
 import { FilterBar } from "@/components/FilterBar";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { KpiTile, SectionTitle } from "@/components/KpiTile";
-import {
-  DailyCsatChart,
-  CsatDistributionChart,
-  SubjectBarChart,
-  AgentCsatChart,
-  DailyVolumeChart,
-  ChannelBarChart,
-  AgentVolumeChart,
-  ResolvedMixChart,
-  ActorShareChart,
-  FrtDistributionChart,
-  ResolutionDistributionChart,
-  CsatByChannelChart,
-  LabelTrendChart,
-  VolumeHeatmapChart,
-} from "@/components/charts/Charts";
+import { DashboardCharts } from "@/components/charts/DashboardCharts";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
@@ -234,69 +219,7 @@ export default async function DashboardPage({
       <SectionTitle tip="Click a bar/slice/point to open matching conversations with the same date range and filters.">
         Trends & distribution
       </SectionTitle>
-      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <DailyVolumeChart
-          data={data?.charts.dailyVolume || []}
-          baseQuery={baseQuery}
-        />
-        <DailyCsatChart
-          data={data?.charts.dailyCsat || []}
-          baseQuery={baseQuery}
-        />
-        <CsatDistributionChart
-          data={data?.charts.csatDistribution || []}
-          baseQuery={baseQuery}
-        />
-        <ResolvedMixChart
-          data={data?.charts.resolvedMix || []}
-          baseQuery={baseQuery}
-        />
-        <ActorShareChart data={data?.charts.actorShare || []} />
-        <ChannelBarChart
-          data={data?.charts.byChannel || []}
-          baseQuery={baseQuery}
-        />
-        <SubjectBarChart
-          data={data?.charts.bySubject || []}
-          baseQuery={baseQuery}
-        />
-        <AgentVolumeChart
-          data={data?.charts.agentVolume || []}
-          baseQuery={baseQuery}
-        />
-        <AgentCsatChart
-          data={data?.charts.averageCsatByAgent || []}
-          baseQuery={baseQuery}
-        />
-        <CsatByChannelChart
-          data={data?.charts.csatByChannel || []}
-          baseQuery={baseQuery}
-        />
-        <FrtDistributionChart
-          data={data?.charts.frtDistribution || []}
-          baseQuery={baseQuery}
-        />
-        <ResolutionDistributionChart
-          data={data?.charts.resolutionDistribution || []}
-          baseQuery={baseQuery}
-        />
-      </div>
-
-      <SectionTitle tip="Deeper patterns from the same filtered conversation set.">
-        Patterns
-      </SectionTitle>
-      <div className="mb-6 grid gap-3 lg:grid-cols-2">
-        <VolumeHeatmapChart
-          data={data?.charts.volumeHeatmap || []}
-          baseQuery={baseQuery}
-        />
-        <LabelTrendChart
-          data={
-            data?.charts.labelTrend || { days: [], series: [] }
-          }
-          baseQuery={baseQuery}
-        />
-      </div>
+      <DashboardCharts charts={data?.charts} baseQuery={baseQuery} />
 
       <SectionTitle tip="Deep breakdown: click a row name to open matching conversations.">
         By channel (in depth)

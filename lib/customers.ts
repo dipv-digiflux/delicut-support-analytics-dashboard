@@ -25,228 +25,227 @@ function displayName(u: {
   return n || u.email || u._id;
 }
 
+const AGG_OPTS = { allowDiskUse: true, maxTimeMS: 120_000 } as const;
+
+function escapeRegex(q: string) {
+  return q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function uniqueCustomerPipeline(convMatch: Record<string, unknown>) {
+  return [
+    { $match: convMatch },
+    {
+      $project: {
+        uid: "$primary_user_id",
+        created_at: 1,
+        message_count: 1,
+        channel_name: 1,
+        assigned_agent_name: 1,
+        assigned_agent_id: 1,
+      },
+    },
+    { $match: { uid: { $nin: [null, ""] } } },
+    {
+      $group: {
+        _id: "$uid",
+        lastAt: { $max: "$created_at" },
+        conversationCount: { $sum: 1 },
+        messageSum: { $sum: { $ifNull: ["$message_count", 0] } },
+        lastChannel: { $last: "$channel_name" },
+        lastAgent: { $last: "$assigned_agent_name" },
+        lastAgentId: { $last: "$assigned_agent_id" },
+      },
+    },
+  ];
+}
+
+async function conversationMatchForCustomers(
+  opts: ConversationFilters & { q?: string },
+) {
+  const { users } = await collections();
+  const convMatch = buildConversationMatch({ ...opts, q: undefined }) as Record<
+    string,
+    unknown
+  >;
+  const q = (opts.q || "").trim();
+  if (!q) return convMatch;
+
+  const re = { $regex: escapeRegex(q), $options: "i" };
+  const textHits = await users
+    .find({
+      role: "user",
+      $or: [
+        { _id: q },
+        { first_name: re },
+        { last_name: re },
+        { email: re },
+        { phone: re },
+        { reference_id: re },
+      ],
+    })
+    .project({ _id: 1 })
+    .limit(500)
+    .toArray();
+  const textIds = textHits.map((u) => u._id);
+
+  return {
+    $and: [
+      convMatch,
+      {
+        $or: [
+          ...(textIds.length
+            ? [
+                { primary_user_id: { $in: textIds } },
+                { user_ids: { $in: textIds } },
+              ]
+            : []),
+          { channel_name: re },
+          { assigned_agent_name: re },
+          { group_name: re },
+          { "resolution.label": re },
+          { "derived.subject": re },
+        ],
+      },
+    ],
+  };
+}
+
+function userLookupStage() {
+  return {
+    $lookup: {
+      from: "users",
+      localField: "_id",
+      foreignField: "_id",
+      pipeline: [
+        { $match: { role: "user" } },
+        {
+          $project: {
+            first_name: 1,
+            last_name: 1,
+            email: 1,
+            phone: 1,
+            reference_id: 1,
+            enrichment: 1,
+            stats: 1,
+            properties: 1,
+            role: 1,
+          },
+        },
+      ],
+      as: "u",
+    },
+  };
+}
+
+function groupedSort(opts: ConversationFilters): Record<string, 1 | -1> {
+  const dir = opts.order === "asc" ? 1 : -1;
+  if (opts.sort === "conversation_count") return { conversationCount: dir };
+  if (opts.sort === "customer_messages") return { messageSum: dir };
+  return { lastAt: dir };
+}
+
 export async function listCustomers(
   opts: ConversationFilters & { q?: string },
 ) {
-  const { users, conversations } = await collections();
+  const { conversations } = await collections();
   const limit = opts.limit;
   const skip = (opts.page - 1) * limit;
-  const q = (opts.q || "").trim();
+  const convMatch = await conversationMatchForCustomers(opts);
+  const profileSort = customerMongoSort(opts);
+  const needsUserSort =
+    Boolean(profileSort) && opts.sort !== "last_seen_at";
 
-  // Conversations matching the same filters as dashboard / conversations
-  const convMatch = buildConversationMatch({
-    ...opts,
-    // When searching by free text, don't require userIds from multi-select only
-    q: undefined,
-  });
+  const pagePipeline = needsUserSort
+    ? [
+        userLookupStage(),
+        { $unwind: "$u" },
+        { $sort: Object.fromEntries(
+          Object.entries(profileSort!).map(([k, v]) => [`u.${k}`, v]),
+        ) },
+        { $skip: skip },
+        { $limit: limit },
+      ]
+    : [
+        { $sort: groupedSort(opts) },
+        { $skip: skip },
+        { $limit: limit },
+        userLookupStage(),
+        { $unwind: { path: "$u", preserveNullAndEmptyArrays: true } },
+      ];
 
-  const matchedUsers = await conversations
-    .aggregate<{ _id: string }>([
-      { $match: convMatch },
-      {
-        $project: {
-          ids: {
-            $setUnion: [
-              { $cond: [{ $ne: ["$primary_user_id", null] }, ["$primary_user_id"], []] },
-              { $ifNull: ["$user_ids", []] },
-            ],
+  const [facet] = await conversations
+    .aggregate<{
+      total: { n: number }[];
+      page: Array<{
+        _id: string;
+        conversationCount: number;
+        messageSum: number;
+        lastChannel?: string | null;
+        lastAgent?: string | null;
+        lastAgentId?: string | null;
+        u?: {
+          _id: string;
+          first_name?: string | null;
+          last_name?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          reference_id?: string | null;
+          enrichment?: { status?: string | null };
+          stats?: {
+            first_seen_at?: Date | null;
+            last_seen_at?: Date | null;
+            conversation_count?: number;
+          };
+          properties?: unknown;
+        };
+      }>;
+    }>(
+      [
+        ...uniqueCustomerPipeline(convMatch),
+        {
+          $facet: {
+            total: [{ $count: "n" }],
+            page: pagePipeline,
           },
         },
-      },
-      { $unwind: "$ids" },
-      { $match: { ids: { $nin: [null, ""] } } },
-      { $group: { _id: "$ids" } },
-    ])
+      ],
+      AGG_OPTS,
+    )
     .toArray();
 
-  let candidateIds = matchedUsers.map((r) => r._id);
-
-  // Free-text also finds users by profile fields, then intersect with candidates
-  // (or union if channel/phone typed — include users found via channel name match)
-  if (q) {
-    const re = {
-      $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      $options: "i",
-    };
-    const textHits = await users
-      .find({
-        role: "user",
-        $or: [
-          { _id: q },
-          { first_name: re },
-          { last_name: re },
-          { email: re },
-          { phone: re },
-          { reference_id: re },
-        ],
-      })
-      .project({ _id: 1 })
-      .limit(500)
-      .toArray();
-    const textIds = new Set(textHits.map((u) => u._id));
-
-    // Also match channel / handle / agent / label in conversations
-    const channelHits = await conversations
-      .aggregate<{ _id: string }>([
-        {
-          $match: {
-            ...convMatch,
-            $or: [
-              { channel_name: re },
-              { assigned_agent_name: re },
-              { group_name: re },
-              { "resolution.label": re },
-              { "derived.subject": re },
-            ],
-          },
-        },
-        {
-          $project: {
-            ids: {
-              $setUnion: [
-                {
-                  $cond: [
-                    { $ne: ["$primary_user_id", null] },
-                    ["$primary_user_id"],
-                    [],
-                  ],
-                },
-                { $ifNull: ["$user_ids", []] },
-              ],
-            },
-          },
-        },
-        { $unwind: "$ids" },
-        { $group: { _id: "$ids" } },
-      ])
-      .toArray();
-    for (const h of channelHits) textIds.add(h._id);
-
-    candidateIds = candidateIds.filter((id) => textIds.has(id));
-  }
-
-  const totalItems = candidateIds.length;
-  if (totalItems === 0) {
+  const totalItems = facet?.total?.[0]?.n || 0;
+  const items = (facet?.page || []).map((row) => {
+    const u = row.u;
+    const ch = parseChannel(row.lastChannel || null);
+    const id = String(row._id);
     return {
-      items: [],
-      totalItems: 0,
-      page: opts.page,
-      limit,
-      totalPages: 1,
-    };
-  }
-
-  const mongoSort = customerMongoSort(opts);
-  const needsComputedSort =
-    opts.sort === "conversation_count" || opts.sort === "customer_messages";
-
-  // For computed sorts, load all matching users + counts then sort/slice in memory
-  const fetchLimit = needsComputedSort ? candidateIds.length : limit;
-  const fetchSkip = needsComputedSort ? 0 : skip;
-
-  const rows = await users
-    .find({ role: "user", _id: { $in: candidateIds } })
-    .sort(mongoSort || { "stats.last_seen_at": -1 })
-    .skip(fetchSkip)
-    .limit(fetchLimit)
-    .toArray();
-
-  const ids = rows.map((u) => u._id);
-
-  const counts =
-    ids.length === 0
-      ? []
-      : await conversations
-          .aggregate([
-            {
-              $match: {
-                ...convMatch,
-                $or: [
-                  { primary_user_id: { $in: ids } },
-                  { user_ids: { $in: ids } },
-                ],
-              },
-            },
-            {
-              $addFields: {
-                _uid: {
-                  $ifNull: [
-                    "$primary_user_id",
-                    { $arrayElemAt: ["$user_ids", 0] },
-                  ],
-                },
-              },
-            },
-            {
-              $group: {
-                _id: "$_uid",
-                conversationCount: { $addToSet: "$_id" },
-                messageSum: { $sum: "$message_count" },
-                lastChannel: { $last: "$channel_name" },
-                lastAgent: { $last: "$assigned_agent_name" },
-                lastAgentId: { $last: "$assigned_agent_id" },
-              },
-            },
-            {
-              $project: {
-                conversationCount: { $size: "$conversationCount" },
-                messageSum: 1,
-                lastChannel: 1,
-                lastAgent: 1,
-                lastAgentId: 1,
-              },
-            },
-          ])
-          .toArray();
-
-  const countMap = new Map(counts.map((c) => [c._id as string, c]));
-
-  let items = rows.map((u) => {
-    const c = countMap.get(u._id);
-    const ch = parseChannel((c?.lastChannel as string) || null);
-    return {
-      id: u._id,
-      name: displayName(u),
-      email: u.email,
-      phone: u.phone,
-      referenceId: u.reference_id,
-      enrichmentStatus: u.enrichment?.status ?? null,
-      firstSeenAt: u.stats?.first_seen_at ?? null,
-      lastSeenAt: u.stats?.last_seen_at ?? null,
-      conversationCount:
-        c?.conversationCount ?? u.stats?.conversation_count ?? 0,
-      messageCount: c?.messageSum ?? 0,
-      lastChannel: c?.lastChannel ?? null,
+      id,
+      name: u
+        ? displayName({ ...u, _id: id })
+        : id,
+      email: u?.email ?? null,
+      phone: u?.phone ?? null,
+      referenceId: u?.reference_id ?? null,
+      enrichmentStatus: u?.enrichment?.status ?? null,
+      firstSeenAt: u?.stats?.first_seen_at ?? null,
+      lastSeenAt: u?.stats?.last_seen_at ?? null,
+      conversationCount: row.conversationCount,
+      messageCount: row.messageSum,
+      lastChannel: row.lastChannel ?? null,
       lastChannelKind: ch.label,
       lastChannelIdentity: ch.identity,
-      lastAgent: c?.lastAgent ?? null,
-      lastAgentId: (c?.lastAgentId as string) || null,
+      lastAgent: row.lastAgent ?? null,
+      lastAgentId: row.lastAgentId || null,
       raw: {
-        id: u._id,
-        email: u.email,
-        phone: u.phone,
-        reference_id: u.reference_id,
-        properties: u.properties,
-        stats: u.stats,
+        id,
+        email: u?.email ?? null,
+        phone: u?.phone ?? null,
+        reference_id: u?.reference_id ?? null,
+        properties: u?.properties,
+        stats: u?.stats,
       },
     };
   });
-
-  if (needsComputedSort) {
-    const dir = opts.order === "asc" ? 1 : -1;
-    items.sort((a, b) => {
-      const av =
-        opts.sort === "customer_messages"
-          ? a.messageCount
-          : a.conversationCount;
-      const bv =
-        opts.sort === "customer_messages"
-          ? b.messageCount
-          : b.conversationCount;
-      return (av - bv) * dir;
-    });
-    items = items.slice(skip, skip + limit);
-  }
 
   return {
     items,
@@ -371,23 +370,26 @@ export async function listCustomerMessages(opts: {
   }
 
   const rows = await conversations
-    .aggregate([
-      { $match: match },
-      { $unwind: "$messages" },
-      ...(opts.before
-        ? [{ $match: { "messages.created_at": { $lt: new Date(opts.before) } } }]
-        : []),
-      { $sort: { "messages.created_at": -1, "messages.message_id": -1 } },
-      { $limit: limit + 1 },
-      {
-        $project: {
-          conversationId: "$_id",
-          channelName: "$channel_name",
-          channelId: "$channel_id",
-          message: "$messages",
+    .aggregate(
+      [
+        { $match: match },
+        { $unwind: "$messages" },
+        ...(opts.before
+          ? [{ $match: { "messages.created_at": { $lt: new Date(opts.before) } } }]
+          : []),
+        { $sort: { "messages.created_at": -1, "messages.message_id": -1 } },
+        { $limit: limit + 1 },
+        {
+          $project: {
+            conversationId: "$_id",
+            channelName: "$channel_name",
+            channelId: "$channel_id",
+            message: "$messages",
+          },
         },
-      },
-    ])
+      ],
+      { allowDiskUse: true, maxTimeMS: 60_000 },
+    )
     .toArray();
 
   const hasMore = rows.length > limit;
@@ -408,138 +410,18 @@ export async function listCustomerMessages(opts: {
 export async function exportCustomersCsv(
   opts: ConversationFilters & { q?: string },
 ) {
-  const { users, conversations } = await collections();
-  const q = (opts.q || "").trim();
-  const convMatch = buildConversationMatch({ ...opts, q: undefined });
+  const { conversations } = await collections();
+  const convMatch = await conversationMatchForCustomers(opts);
 
-  const matchedUsers = await conversations
-    .aggregate<{ _id: string }>([
-      { $match: convMatch },
-      {
-        $project: {
-          ids: {
-            $setUnion: [
-              {
-                $cond: [
-                  { $ne: ["$primary_user_id", null] },
-                  ["$primary_user_id"],
-                  [],
-                ],
-              },
-              { $ifNull: ["$user_ids", []] },
-            ],
-          },
-        },
-      },
-      { $unwind: "$ids" },
-      { $match: { ids: { $nin: [null, ""] } } },
-      { $group: { _id: "$ids" } },
-    ])
-    .toArray();
-
-  let candidateIds = matchedUsers.map((r) => r._id);
-
-  if (q) {
-    const re = {
-      $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      $options: "i",
-    };
-    const textHits = await users
-      .find({
-        role: "user",
-        $or: [
-          { _id: q },
-          { first_name: re },
-          { last_name: re },
-          { email: re },
-          { phone: re },
-          { reference_id: re },
-        ],
-      })
-      .project({ _id: 1 })
-      .toArray();
-    const textIds = new Set(textHits.map((u) => u._id));
-    const channelHits = await conversations
-      .aggregate<{ _id: string }>([
-        {
-          $match: {
-            ...convMatch,
-            $or: [
-              { channel_name: re },
-              { assigned_agent_name: re },
-              { group_name: re },
-              { "resolution.label": re },
-              { "derived.subject": re },
-            ],
-          },
-        },
-        {
-          $project: {
-            ids: {
-              $setUnion: [
-                {
-                  $cond: [
-                    { $ne: ["$primary_user_id", null] },
-                    ["$primary_user_id"],
-                    [],
-                  ],
-                },
-                { $ifNull: ["$user_ids", []] },
-              ],
-            },
-          },
-        },
-        { $unwind: "$ids" },
-        { $group: { _id: "$ids" } },
-      ])
-      .toArray();
-    for (const h of channelHits) textIds.add(h._id);
-    candidateIds = candidateIds.filter((id) => textIds.has(id));
-  }
-
-  const rows = await users
-    .find({ role: "user", _id: { $in: candidateIds } })
-    .sort({ "stats.last_seen_at": -1 })
-    .toArray();
-
-  const ids = rows.map((u) => u._id);
-  const counts =
-    ids.length === 0
-      ? []
-      : await conversations
-          .aggregate([
-            {
-              $match: {
-                ...convMatch,
-                $or: [
-                  { primary_user_id: { $in: ids } },
-                  { user_ids: { $in: ids } },
-                ],
-              },
-            },
-            {
-              $addFields: {
-                _uid: {
-                  $ifNull: [
-                    "$primary_user_id",
-                    { $arrayElemAt: ["$user_ids", 0] },
-                  ],
-                },
-              },
-            },
-            {
-              $group: {
-                _id: "$_uid",
-                conversationCount: { $sum: 1 },
-                messageSum: { $sum: "$message_count" },
-                lastChannel: { $last: "$channel_name" },
-                lastAgent: { $last: "$assigned_agent_name" },
-                lastAgentId: { $last: "$assigned_agent_id" },
-              },
-            },
-          ])
-          .toArray();
-  const countMap = new Map(counts.map((c) => [c._id as string, c]));
+  const cursor = conversations.aggregate(
+    [
+      ...uniqueCustomerPipeline(convMatch),
+      { $sort: { lastAt: -1 } },
+      userLookupStage(),
+      { $unwind: { path: "$u", preserveNullAndEmptyArrays: true } },
+    ],
+    { ...AGG_OPTS, batchSize: 50 },
+  );
 
   const headers = [
     "user_id",
@@ -559,27 +441,39 @@ export async function exportCustomersCsv(
     "enrichment_status",
   ];
 
-  const data = rows.map((u) => {
-    const c = countMap.get(u._id);
-    const ch = parseChannel((c?.lastChannel as string) || null);
-    return [
-      u._id,
-      displayName(u),
-      u.email,
-      u.phone,
-      u.reference_id,
-      c?.lastChannel ?? "",
+  const data: unknown[][] = [];
+  for await (const row of cursor) {
+    const id = String(row._id);
+    const u = row.u as
+      | {
+          first_name?: string | null;
+          last_name?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          reference_id?: string | null;
+          enrichment?: { status?: string | null };
+          stats?: { first_seen_at?: Date | null; last_seen_at?: Date | null };
+        }
+      | undefined;
+    const ch = parseChannel((row.lastChannel as string) || null);
+    data.push([
+      id,
+      u ? displayName({ ...u, _id: id }) : id,
+      u?.email ?? "",
+      u?.phone ?? "",
+      u?.reference_id ?? "",
+      row.lastChannel ?? "",
       ch.label,
       ch.identity,
-      c?.lastAgent ?? "",
-      c?.lastAgentId ?? "",
-      c?.conversationCount ?? u.stats?.conversation_count ?? 0,
-      c?.messageSum ?? 0,
-      u.stats?.first_seen_at?.toISOString?.() || "",
-      u.stats?.last_seen_at?.toISOString?.() || "",
-      u.enrichment?.status ?? "",
-    ];
-  });
+      row.lastAgent ?? "",
+      row.lastAgentId ?? "",
+      row.conversationCount ?? 0,
+      row.messageSum ?? 0,
+      u?.stats?.first_seen_at?.toISOString?.() || "",
+      u?.stats?.last_seen_at?.toISOString?.() || "",
+      u?.enrichment?.status ?? "",
+    ]);
+  }
 
   return {
     csv: toCsv(headers, data),
