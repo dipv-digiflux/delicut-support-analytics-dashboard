@@ -21,10 +21,16 @@ export function generateMetadata(): Metadata {
       index: false,
       follow: false,
       nocache: true,
+      noarchive: true,
+      nosnippet: true,
+      noimageindex: true,
+      notranslate: true,
       googleBot: {
         index: false,
         follow: false,
         noimageindex: true,
+        noarchive: true,
+        nosnippet: true,
         "max-snippet": 0,
         "max-image-preview": "none",
         "max-video-preview": 0,
@@ -54,8 +60,6 @@ export function generateMetadata(): Metadata {
       description: "Private Delicut FreshChat support analytics (login required).",
     },
     other: {
-      // Extra crawler hints beyond standard robots meta
-      googlebot: "noindex, nofollow, noarchive, nosnippet, noimageindex",
       bingbot: "noindex, nofollow, noarchive, nosnippet",
     },
   };

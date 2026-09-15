@@ -63,10 +63,10 @@ When `DASHBOARD_ADMIN_PASSWORD` is set, visiting the app redirects to `/login`. 
 
 This dashboard is internal analytics. Crawlers are blocked via:
 
-- `robots: noindex, nofollow` in page metadata
+- `robots: noindex, nofollow, noarchive` in page metadata
 - `X-Robots-Tag` response header on all routes
-- `/robots.txt` → `Disallow: /`
-- Empty `/sitemap.xml`
+- `/robots.txt` → `Disallow: /` (public on purpose so crawlers can read it)
+- Empty `/sitemap.xml` (also public; not listed in robots.txt)
 - Admin login gate (session cookie)
 
 Do not submit the URL to Google Search Console or public directories.
