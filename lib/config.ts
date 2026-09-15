@@ -113,6 +113,11 @@ const ConfigSchema = z.object({
   CUSTOMER_CHAT_PAGE_SIZE: z.coerce.number().int().positive().default(50),
   /** Soft cap for CSV export rows */
   EXPORT_CSV_MAX_ROWS: z.coerce.number().int().positive().default(10000),
+  /**
+   * HTTPS URL of the full data workbook on S3 (or any CDN).
+   * Sidebar “Download all data” redirects here. Empty = not configured.
+   */
+  DATA_SHEET_URL: z.string().optional().default(""),
   /** Optional Bearer secret for /api/* (empty = cookie session only) */
   DASHBOARD_API_SECRET: z.string().optional().default(""),
   /**
@@ -227,6 +232,7 @@ export function getConfig(): AppConfig {
     CLASSIFY_LLM_ENABLED: Boolean(data.CLASSIFY_LLM_ENABLED),
     LOG_TO_FILE: Boolean(data.LOG_TO_FILE),
     syncEvents,
+    DATA_SHEET_URL: (data.DATA_SHEET_URL || "").trim(),
     hasFreshchatCredentials: Boolean(
       data.FRESHCHAT_API_TOKEN && base && !base.includes("your-domain"),
     ),

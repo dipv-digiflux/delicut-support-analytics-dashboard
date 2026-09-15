@@ -52,7 +52,11 @@ function NavLinks({
   );
 }
 
-export function SidebarNav() {
+export function SidebarNav({
+  sheetConfigured = false,
+}: {
+  sheetConfigured?: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -65,6 +69,31 @@ export function SidebarNav() {
         Leadership
       </div>
       <NavLinks items={leadership} pathname={pathname} />
+      <div className="mb-2 mt-5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
+        Export
+      </div>
+      <a
+        href="/api/data-sheet"
+        target="_blank"
+        rel="noopener noreferrer"
+        title={
+          sheetConfigured
+            ? "Download the full data workbook from S3"
+            : "Set DATA_SHEET_URL in .env to the S3 sheet link"
+        }
+        className={`flex items-center gap-2.5 rounded-md px-3 py-2 ${
+          sheetConfigured
+            ? "text-[var(--foreground)] hover:bg-white"
+            : "cursor-not-allowed text-[var(--muted)]"
+        }`}
+        onClick={(e) => {
+          if (sheetConfigured) return;
+          e.preventDefault();
+        }}
+      >
+        <span className="w-4 text-center text-[var(--muted)]">↓</span>
+        Download all data
+      </a>
     </nav>
   );
 }
