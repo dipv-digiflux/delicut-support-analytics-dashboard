@@ -16,8 +16,7 @@ Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 |----------|---------|
 | `FRESHCHAT_API_BASE` | Freshchat API root `https://…/v2` |
 | `FRESHCHAT_API_TOKEN` | Bearer token (`.env.local` only) |
-| `MONGODB_URI` | Mongo connection |
-| `MONGODB_DB` | Database name |
+| `MONGODB_URI` | Full Mongo URL **including the database name** in the path (`mongodb://127.0.0.1:27017/freshchat_analytics`). No separate `MONGODB_DB`. |
 | `REPORTING_TIMEZONE` | Default timezone when URL has no `?tz=` (`Asia/Dubai`) |
 | `DASHBOARD_ADMIN_USER` | Login username |
 | `DASHBOARD_ADMIN_PASSWORD` | Login password (empty disables the gate) |
@@ -52,8 +51,7 @@ All other tunables (extract budgets, HTTP retries, page sizes, export caps, etc.
 ```bash
 FRESHCHAT_API_BASE=https://YOUR_DOMAIN.freshchat.com/v2
 FRESHCHAT_API_TOKEN=paste_token_here
-MONGODB_URI=mongodb://127.0.0.1:27017
-MONGODB_DB=freshchat_analytics
+MONGODB_URI=mongodb://127.0.0.1:27017/freshchat_analytics
 REPORTING_TIMEZONE=Asia/Dubai
 DASHBOARD_ADMIN_USER=admin
 DASHBOARD_ADMIN_PASSWORD=admin

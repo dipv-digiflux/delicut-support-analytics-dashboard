@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Full MongoDB dump of MONGODB_DB (mongodump).
+ * Full MongoDB dump of the database named in MONGODB_URI (mongodump).
  *
  * Usage:
  *   npm run db:backup
@@ -9,7 +9,7 @@
  *
  * Requires MongoDB Database Tools (`mongodump` on PATH).
  * Restore later:
- *   mongorestore --uri="$MONGODB_URI" --nsInclude="$MONGODB_DB.*" --gzip --drop <dump-dir>
+ *   mongorestore --uri="$MONGODB_URI" --gzip --drop <dump-dir>
  *   # or without --gzip if you used --no-gzip
  */
 import { spawnSync } from "child_process";

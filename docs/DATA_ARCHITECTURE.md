@@ -108,7 +108,7 @@ Default sync events (`lib/config.ts`):
 
 ## 3. What data we store
 
-Database name: `MONGODB_DB` (default `freshchat_analytics`).
+Database name: parsed from `MONGODB_URI` path (default `mongodb://127.0.0.1:27017/freshchat_analytics`).
 
 ### 3.1 Collections
 

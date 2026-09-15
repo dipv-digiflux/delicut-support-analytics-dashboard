@@ -45,7 +45,7 @@ export async function getMongoClient(): Promise<MongoClient> {
 export async function getDb(): Promise<Db> {
   const cfg = getConfig();
   const client = await getMongoClient();
-  return client.db(cfg.MONGODB_DB);
+  return client.db(cfg.MONGODB_DB); // parsed from MONGODB_URI path
 }
 
 export async function collections() {
