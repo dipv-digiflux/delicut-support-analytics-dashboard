@@ -20,7 +20,9 @@ Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 | `REPORTING_TIMEZONE` | Default timezone when URL has no `?tz=` (`Asia/Dubai`) |
 | `DASHBOARD_ADMIN_USER` | Login username |
 | `DASHBOARD_ADMIN_PASSWORD` | Login password (empty disables the gate) |
-| `DATA_SHEET_URL` | HTTPS S3/CDN link for sidebar **Download all data** (empty until you paste it) |
+| `DATA_SHEET_URL` | `s3://bucket/key.xlsx` for sidebar **Download all data** |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM keys that can `s3:GetObject` on that file (`.env.local`) |
+| `AWS_REGION` | Bucket region (`ap-south-1` default) |
 
 **Optional overrides** (defaults live in `lib/config.ts` — uncomment in env only to change):
 
@@ -56,7 +58,10 @@ MONGODB_URI=mongodb://127.0.0.1:27017/freshchat_analytics
 REPORTING_TIMEZONE=Asia/Dubai
 DASHBOARD_ADMIN_USER=admin
 DASHBOARD_ADMIN_PASSWORD=admin
-DATA_SHEET_URL=
+DATA_SHEET_URL=s3://support-analytics-report/freshchat-20260914-1646.xlsx
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=ap-south-1
 ```
 
 When `DASHBOARD_ADMIN_PASSWORD` is set, visiting the app redirects to `/login`. Default local login: **admin / admin**. Sign out from the header.

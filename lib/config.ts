@@ -114,10 +114,13 @@ const ConfigSchema = z.object({
   /** Soft cap for CSV export rows */
   EXPORT_CSV_MAX_ROWS: z.coerce.number().int().positive().default(10000),
   /**
-   * HTTPS URL of the full data workbook on S3 (or any CDN).
-   * Sidebar “Download all data” redirects here. Empty = not configured.
+   * Full workbook for sidebar “Download all data”.
+   * `s3://bucket/key.xlsx` (signed with AWS keys) or a public `https://` link.
    */
   DATA_SHEET_URL: z.string().optional().default(""),
+  AWS_ACCESS_KEY_ID: z.string().optional().default(""),
+  AWS_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  AWS_REGION: z.string().optional().default("ap-south-1"),
   /** Optional Bearer secret for /api/* (empty = cookie session only) */
   DASHBOARD_API_SECRET: z.string().optional().default(""),
   /**
@@ -233,6 +236,9 @@ export function getConfig(): AppConfig {
     LOG_TO_FILE: Boolean(data.LOG_TO_FILE),
     syncEvents,
     DATA_SHEET_URL: (data.DATA_SHEET_URL || "").trim(),
+    AWS_ACCESS_KEY_ID: (data.AWS_ACCESS_KEY_ID || "").trim(),
+    AWS_SECRET_ACCESS_KEY: (data.AWS_SECRET_ACCESS_KEY || "").trim(),
+    AWS_REGION: (data.AWS_REGION || "ap-south-1").trim(),
     hasFreshchatCredentials: Boolean(
       data.FRESHCHAT_API_TOKEN && base && !base.includes("your-domain"),
     ),

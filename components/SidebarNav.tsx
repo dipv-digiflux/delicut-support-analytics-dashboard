@@ -79,7 +79,7 @@ export function SidebarNav({
         title={
           sheetConfigured
             ? "Download the full data workbook from S3"
-            : "Set DATA_SHEET_URL in .env to the S3 sheet link"
+            : "Set DATA_SHEET_URL and AWS keys in .env"
         }
         className={`flex items-center gap-2.5 rounded-md px-3 py-2 ${
           sheetConfigured
