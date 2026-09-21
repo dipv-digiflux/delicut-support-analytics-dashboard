@@ -55,13 +55,20 @@ export default async function ConversationDetailPage({
             <span className="text-xs text-amber-700">Stub (no transcript yet)</span>
           )}
         </div>
-        {conversation.user.id && (
+        <div className="flex flex-wrap items-end gap-2">
           <ExportButton
-            endpoint={`/api/customers/${conversation.user.id}/export`}
+            endpoint={`/api/conversations/${conversation.id}/export`}
             query=""
-            label="Export chat CSV"
+            label="Export messages (raw)"
           />
-        )}
+          {conversation.user.id && (
+            <ExportButton
+              endpoint={`/api/customers/${conversation.user.id}/export`}
+              query=""
+              label="Export customer chat"
+            />
+          )}
+        </div>
       </div>
 
       <ConversationChat conversation={conversation} timeZone={timeZone} />

@@ -18,6 +18,7 @@ export interface EmbeddedAttachment {
   width: number | null;
   height: number | null;
   duration_seconds: number | null;
+  /** Original Freshchat attachment part blob */
   raw: Record<string, unknown>;
 }
 
@@ -86,6 +87,12 @@ export interface Conversation {
   messages: EmbeddedMessage[];
   message_count: number;
   messages_truncated: boolean;
+  /** Denormalized — set on transcript merge so KPIs never scan messages[] */
+  has_attachment: boolean;
+  attachment_count: number;
+  actor_counts: Record<ActorType, number>;
+  /** First user message text (truncated) for table preview */
+  preview_text: string;
   csat: {
     rating: number | null;
     rating_raw: string | null;

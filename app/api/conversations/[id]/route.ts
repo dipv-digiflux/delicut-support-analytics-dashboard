@@ -11,7 +11,7 @@ export async function GET(
 
   try {
     const { id } = await ctx.params;
-    const conversation = await getConversation(id);
+    const conversation = await getConversation(id, { includeMessages: true });
     if (!conversation) {
       return NextResponse.json(
         {

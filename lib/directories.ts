@@ -191,7 +191,10 @@ export async function listChannels(q?: string, limit = 40, page = 1) {
     { $limit: 200 },
   ];
 
-  const rows = await conversations.aggregate(pipeline).toArray();
+  const rows = await conversations.aggregate(pipeline, {
+    allowDiskUse: true,
+    maxTimeMS: 30_000,
+  }).toArray();
   let items = rows.map((r) => {
     const raw = String(r.name || r._id);
     const parsed = parseChannel(raw);

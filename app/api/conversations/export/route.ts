@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exportConversationsCsv } from "@/lib/aggregations";
+import {
+  exportConversationsCsv,
+  exportMessagesCsv,
+} from "@/lib/aggregations";
 import { assertApiAccess } from "@/lib/api-auth";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
 import { getConfig } from "@/lib/config";
@@ -9,10 +12,15 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    const filters = filtersFromSearchParams(new URL(req.url).searchParams);
-    const result = await exportConversationsCsv(filters);
+    const url = new URL(req.url);
+    const filters = filtersFromSearchParams(url.searchParams);
+    const kind = url.searchParams.get("kind") === "messages" ? "messages" : "conversations";
+    const result =
+      kind === "messages"
+        ? await exportMessagesCsv(filters)
+        : await exportConversationsCsv(filters);
     const brand = getConfig().APP_BRAND_NAME.toLowerCase().replace(/\s+/g, "-");
-    const filename = `${brand}-conversations-${filters.from}_${filters.to}.csv`;
+    const filename = `${brand}-${kind}-${filters.from}_${filters.to}.csv`;
 
     return new NextResponse(result.csv, {
       status: 200,

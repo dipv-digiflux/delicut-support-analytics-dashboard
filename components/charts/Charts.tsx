@@ -18,7 +18,11 @@ import {
 } from "chart.js";
 import { Line, Doughnut, Bar } from "react-chartjs-2";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { conversationsHrefFromQuery } from "@/lib/dashboard-links";
+import {
+  conversationsHrefFromQuery,
+  subjectFilterValue,
+} from "@/lib/dashboard-links";
+import { frtFilterFromChartBucket } from "@/lib/filters";
 
 ChartJS.register(
   CategoryScale,
@@ -228,7 +232,7 @@ export function SubjectBarChart({
             onClick: (e, els) =>
               clickIndex(e, els, (i) => {
                 const subject = data[i]?.subject || data[i]?.label;
-                if (subject) go({ subject });
+                if (subject) go({ subject: subjectFilterValue(subject) });
               }),
             onHover: (event, elements) => {
               const canvas = event.native?.target as HTMLElement | undefined;
@@ -614,7 +618,7 @@ export function FrtDistributionChart({
   return (
     <ChartCard
       title="FRT distribution"
-      tip="First-response time buckets. Click a bar to browse chats (same date filters)."
+      tip="First-response time buckets. 2 min is the industry SLA — click a bar to open that slice."
       clickable
     >
       {data.every((d) => d.count === 0) ? (
@@ -633,8 +637,10 @@ export function FrtDistributionChart({
           options={{
             ...compactOpts,
             onClick: (e, els) =>
-              clickIndex(e, els, () => {
-                go({});
+              clickIndex(e, els, (idx) => {
+                const bucket = data[idx]?.bucket;
+                const frt = bucket ? frtFilterFromChartBucket(bucket) : undefined;
+                go(frt ? { frt, sort: "frt", order: "desc" } : {});
               }),
             onHover: (event, elements) => {
               const canvas = event.native?.target as HTMLElement | undefined;
@@ -813,7 +819,11 @@ export function LabelTrendChart({
                 const ds = els[0]?.datasetIndex ?? 0;
                 const label = data.series[ds]?.label;
                 if (day && label)
-                  go({ from: day, to: day, subject: label });
+                  go({
+                    from: day,
+                    to: day,
+                    subject: subjectFilterValue(label),
+                  });
               }),
             onHover: (event, elements) => {
               const canvas = event.native?.target as HTMLElement | undefined;

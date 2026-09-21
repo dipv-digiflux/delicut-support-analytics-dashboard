@@ -25,6 +25,45 @@ const boolish = z
   .transform((v) => v === true || v === "true")
   .default(false);
 
+const DEFAULT_MONGODB_URI =
+  "mongodb://127.0.0.1:27017/freshchat_analytics";
+
+/**
+ * Database name from a Mongo connection string path (`…/dbname?…`).
+ * Authority is everything after the last `@` (or the whole host) up to `/`.
+ */
+export function databaseNameFromMongoUri(uri: string): string | undefined {
+  const trimmed = uri.trim();
+  if (!trimmed) return undefined;
+
+  const schemeEnd = trimmed.indexOf("://");
+  const rest = schemeEnd >= 0 ? trimmed.slice(schemeEnd + 3) : trimmed;
+  const at = rest.lastIndexOf("@");
+  const hostAndPath = at >= 0 ? rest.slice(at + 1) : rest;
+  const slash = hostAndPath.indexOf("/");
+  if (slash === -1) return undefined;
+
+  const pathAndQuery = hostAndPath.slice(slash + 1);
+  const db = pathAndQuery.split(/[/?#]/)[0];
+  if (!db) return undefined;
+
+  try {
+    return decodeURIComponent(db);
+  } catch {
+    return db;
+  }
+}
+
+function requireMongoDatabaseName(uri: string): string {
+  const db = databaseNameFromMongoUri(uri);
+  if (!db) {
+    throw new Error(
+      "Invalid configuration:\n  - MONGODB_URI: must include the database name in the path, e.g. mongodb://127.0.0.1:27017/freshchat_analytics",
+    );
+  }
+  return db;
+}
+
 /**
  * App configuration.
  *
@@ -43,18 +82,20 @@ const ConfigSchema = z.object({
     .transform((v) => v.replace(/^http:\/\//i, "https://")),
   /** Freshchat Bearer token (Admin → API Tokens) */
   FRESHCHAT_API_TOKEN: z.string().optional().default(""),
-  /** Mongo connection string */
-  MONGODB_URI: z.string().default("mongodb://127.0.0.1:27017"),
-  /** Mongo database name for analytics warehouse */
-  MONGODB_DB: z.string().default("freshchat_analytics"),
-  MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(10),
+  /**
+   * Mongo connection string — include the database in the path.
+   * e.g. mongodb://127.0.0.1:27017/freshchat_analytics
+   *      mongodb+srv://user:pass@cluster.mongodb.net/freshchat_analytics
+   */
+  MONGODB_URI: z.string().default(DEFAULT_MONGODB_URI),
+  MONGODB_MAX_POOL_SIZE: z.coerce.number().int().positive().default(8),
   MONGODB_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
 
   // --- Product / UI (defaults; optional env override) ---
   /** Sidebar + document title brand */
   APP_BRAND_NAME: z.string().default("Delicut"),
   /** Product subtitle under brand */
-  APP_PRODUCT_NAME: z.string().default("Support Analytics"),
+  APP_PRODUCT_NAME: z.string().default("FreshChat Support Analytics"),
   /**
    * Default reporting timezone when URL/localStorage has no `tz`.
    * UI dropdown: Asia/Dubai | Asia/Kolkata | UTC
@@ -72,6 +113,14 @@ const ConfigSchema = z.object({
   CUSTOMER_CHAT_PAGE_SIZE: z.coerce.number().int().positive().default(50),
   /** Soft cap for CSV export rows */
   EXPORT_CSV_MAX_ROWS: z.coerce.number().int().positive().default(10000),
+  /**
+   * Full workbook for sidebar “Download all data”.
+   * `s3://bucket/key.xlsx` (signed with AWS keys) or a public `https://` link.
+   */
+  DATA_SHEET_URL: z.string().optional().default(""),
+  AWS_ACCESS_KEY_ID: z.string().optional().default(""),
+  AWS_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  AWS_REGION: z.string().optional().default("ap-south-1"),
   /** Optional Bearer secret for /api/* (empty = cookie session only) */
   DASHBOARD_API_SECRET: z.string().optional().default(""),
   /**
@@ -130,10 +179,24 @@ const ConfigSchema = z.object({
 
   // --- Classification (off = Freshchat labels only) ---
   CLASSIFY_ENABLED: boolish,
-  CLASSIFIER_VERSION: z.string().default("kw-v1"),
+  CLASSIFIER_VERSION: z.string().default("kw-v2-data"),
   CLASSIFY_MESSAGE_WINDOW: z.coerce.number().int().positive().default(5),
   CLASSIFY_MIN_SCORE: z.coerce.number().int().positive().default(3),
   CLASSIFY_LLM_ENABLED: boolish,
+
+  /** Optional platform Mongo for order/AOV sidebar. Empty = show unmatched. */
+  PLATFORM_MONGODB_URI: z.string().optional().default(""),
+  PLATFORM_MONGODB_DB: z.string().optional().default(""),
+  PLATFORM_CUSTOMER_COLLECTION: z.string().optional().default("customer"),
+  /**
+   * Analytics MySQL (renewal / AOV / non-renewals). Empty = /outcomes stays
+   * chat-risk language only — we do not invent subscription outcomes.
+   */
+  ANALYTICS_MYSQL_URI: z.string().optional().default(""),
+  /**
+   * ZIWO (or equivalent) call ingest. Empty = /sales is Phone-ZIWO chats only.
+   */
+  ZIWO_INGEST_URI: z.string().optional().default(""),
 
   // --- Logging ---
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
@@ -153,6 +216,8 @@ const ConfigSchema = z.object({
 export type AppConfig = z.infer<typeof ConfigSchema> & {
   syncEvents: z.infer<typeof ExtractEventSchema>[];
   hasFreshchatCredentials: boolean;
+  /** Database name parsed from MONGODB_URI (path after the host). */
+  MONGODB_DB: string;
 };
 
 let cached: AppConfig | null = null;
@@ -169,6 +234,7 @@ export function getConfig(): AppConfig {
   }
 
   const data = parsed.data;
+  const mongodbDb = requireMongoDatabaseName(data.MONGODB_URI);
   const syncEvents = data.SYNC_EVENTS.split(",")
     .map((s) => s.trim())
     .filter(Boolean)
@@ -177,11 +243,16 @@ export function getConfig(): AppConfig {
   const base = (data.FRESHCHAT_API_BASE || "").replace(/\/$/, "");
   cached = {
     ...data,
+    MONGODB_DB: mongodbDb,
     FRESHCHAT_API_BASE: base,
     CLASSIFY_ENABLED: Boolean(data.CLASSIFY_ENABLED),
     CLASSIFY_LLM_ENABLED: Boolean(data.CLASSIFY_LLM_ENABLED),
     LOG_TO_FILE: Boolean(data.LOG_TO_FILE),
     syncEvents,
+    DATA_SHEET_URL: (data.DATA_SHEET_URL || "").trim(),
+    AWS_ACCESS_KEY_ID: (data.AWS_ACCESS_KEY_ID || "").trim(),
+    AWS_SECRET_ACCESS_KEY: (data.AWS_SECRET_ACCESS_KEY || "").trim(),
+    AWS_REGION: (data.AWS_REGION || "ap-south-1").trim(),
     hasFreshchatCredentials: Boolean(
       data.FRESHCHAT_API_TOKEN && base && !base.includes("your-domain"),
     ),

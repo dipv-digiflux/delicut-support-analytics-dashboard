@@ -14,17 +14,23 @@ export function generateMetadata(): Metadata {
   const title = `${cfg.APP_BRAND_NAME} ${cfg.APP_PRODUCT_NAME}`;
   return {
     title,
-    description: `Private support analytics for ${cfg.APP_BRAND_NAME} — not for public listing.`,
+    description: `Private FreshChat support analytics for ${cfg.APP_BRAND_NAME} — not for public listing.`,
     applicationName: `${cfg.APP_BRAND_NAME} ${cfg.APP_PRODUCT_NAME}`,
     // Hard block search engines / AI crawlers from indexing this private dashboard
     robots: {
       index: false,
       follow: false,
       nocache: true,
+      noarchive: true,
+      nosnippet: true,
+      noimageindex: true,
+      notranslate: true,
       googleBot: {
         index: false,
         follow: false,
         noimageindex: true,
+        noarchive: true,
+        nosnippet: true,
         "max-snippet": 0,
         "max-image-preview": "none",
         "max-video-preview": 0,
@@ -43,7 +49,7 @@ export function generateMetadata(): Metadata {
     },
     openGraph: {
       title,
-      description: "Private Delicut support analytics (login required).",
+      description: "Private Delicut FreshChat support analytics (login required).",
       type: "website",
       // Discourage previews / sharing cards
       images: [{ url: "/logo.png" }],
@@ -51,11 +57,9 @@ export function generateMetadata(): Metadata {
     twitter: {
       card: "summary",
       title,
-      description: "Private Delicut support analytics (login required).",
+      description: "Private Delicut FreshChat support analytics (login required).",
     },
     other: {
-      // Extra crawler hints beyond standard robots meta
-      googlebot: "noindex, nofollow, noarchive, nosnippet, noimageindex",
       bingbot: "noindex, nofollow, noarchive, nosnippet",
     },
   };

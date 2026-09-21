@@ -1,11 +1,9 @@
 import { Suspense } from "react";
 import { FilterBar } from "@/components/FilterBar";
-import { ExportButton } from "@/components/ExportButton";
 import { ConversationTable } from "@/components/conversations/ConversationTable";
 import { PaginationBar } from "@/components/ui/PaginationBar";
 import { listConversations } from "@/lib/aggregations";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
-import { filtersToQuery } from "@/lib/filters";
 import { timezoneLabel } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +24,6 @@ export default async function ConversationsPage({
     error = err instanceof Error ? err.message : String(err);
   }
 
-  const qs = filtersToQuery(filters);
-
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -44,11 +40,10 @@ export default async function ConversationsPage({
               Conversations
             </h1>
             <p className="text-sm text-[var(--muted)]">
-              {timezoneLabel(filters.timeZone)} · filters drive export
+              {timezoneLabel(filters.timeZone)}
             </p>
           </div>
         </div>
-        <ExportButton query={qs} label="Export CSV" />
       </div>
 
       <Suspense fallback={null}>

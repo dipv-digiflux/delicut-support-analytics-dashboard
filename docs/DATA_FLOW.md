@@ -2,7 +2,9 @@
 
 How Freshchat can send us data, **what we actually use**, how webhooks fit, and **what we will not get** with the current setup (and with webhooks alone).
 
-Related: [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md) · [SYNC.md](./SYNC.md) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) · [FRESHCHAT_ADMIN_CHECKLIST.md](./FRESHCHAT_ADMIN_CHECKLIST.md)
+Related: [HOW_IT_WORKS.md](./HOW_IT_WORKS.md) (product map) · [DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md) · [SYNC.md](./SYNC.md) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) · [FRESHCHAT_ADMIN_CHECKLIST.md](./FRESHCHAT_ADMIN_CHECKLIST.md)
+
+**In the app:** **How it works** (`/how-it-works`) and **Data flow** (`/data-flow`).
 
 ---
 

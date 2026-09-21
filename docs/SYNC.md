@@ -93,10 +93,24 @@ Expected (~253 transcript days, newest first):
 
 `npm run db:init` / sync start ensures:
 
-- `conversations`: `created_at`, channel/agent/user filters, `messages.message_id`, etc.
+- `conversations`: `created_at`, channel/agent/user filters, `messages.message_id`, `has_attachment+created_at`, etc.
 - `sync_windows`: `event + window_start` (±), `event + status + window_start`, drops legacy `time_start` index
 - `sync_campaigns`: `status + updated_at`
 - `sync_runs` / `users` as before
+
+### Query / memory optimizations
+
+- Conversation docs **also** store denormalized `has_attachment`, `attachment_count`, `actor_counts`, `preview_text` (set on transcript merge) — these are **additive**, not a replacement for messages.
+- **All Freshchat message fields are kept**, including `messages[].raw` (original CSV columns) and attachment `raw`.
+- Dashboard KPIs project away `messages[]` only at **query time** (read path) so charts stay fast — data remains in Mongo.
+- Conversation list/export use slim projections for table rows; detail/chat APIs still return full message payloads.
+
+One-time helpers:
+
+```bash
+npm run db:optimize      # rollups / indexes only — never deletes source fields
+npm run db:restore-raw   # if raw was stripped, replay .cache/extracts Chat-Transcript CSVs
+```
 
 ## Verify
 

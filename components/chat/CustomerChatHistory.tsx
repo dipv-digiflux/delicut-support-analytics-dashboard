@@ -8,6 +8,8 @@ import { MediaModal, type MediaItem } from "@/components/ui/MediaModal";
 import { RawJsonButton, RawJsonModal } from "@/components/ui/RawJson";
 import { channelTheme, parseChannel } from "@/lib/display/channel";
 import { shortId } from "@/lib/display/mask";
+import { AccountSnapshot } from "@/components/AccountSnapshot";
+import type { PlatformSnapshot } from "@/lib/platform/lookup";
 import { formatInTimeZone } from "@/lib/timezone";
 
 type Msg = {
@@ -57,6 +59,7 @@ type CustomerProfile = {
     csat: number | null;
     label: string | null;
   }[];
+  platform?: PlatformSnapshot;
   raw?: unknown;
 };
 
@@ -311,6 +314,8 @@ export function CustomerChatHistory({
               value={customer?.referenceId || "—"}
             />
           </Section>
+
+          <AccountSnapshot snapshot={customer?.platform} />
 
           <Section title="Channel">
             <div className="mb-2">

@@ -1,39 +1,20 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { DissatisfiedBoard } from "@/components/DissatisfiedBoard";
 import { FilterBar } from "@/components/FilterBar";
 import { BreakdownTable } from "@/components/BreakdownTable";
-import {
-  DailyCsatChart,
-  CsatDistributionChart,
-  SubjectBarChart,
-  AgentCsatChart,
-  DailyVolumeChart,
-  ChannelBarChart,
-  AgentVolumeChart,
-  ResolvedMixChart,
-  ActorShareChart,
-  FrtDistributionChart,
-  ResolutionDistributionChart,
-  CsatByChannelChart,
-  LabelTrendChart,
-  VolumeHeatmapChart,
-} from "@/components/charts/Charts";
+import { KpiTile, SectionTitle } from "@/components/KpiTile";
+import { DashboardCharts } from "@/components/charts/DashboardCharts";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { getKpis, getSyncStatus } from "@/lib/aggregations";
+import { getDissatisfiedBoard, getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
 import { conversationsHref } from "@/lib/dashboard-links";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
 import { filtersToQuery } from "@/lib/filters";
+import { fmtDuration, fmtInt, fmtNum, fmtPct } from "@/lib/format-kpi";
 import { timezoneLabel } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
-
-function fmtDuration(seconds?: number | null) {
-  if (seconds == null) return "—";
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
-  return `${(seconds / 3600).toFixed(1)}h`;
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -45,11 +26,15 @@ export default async function DashboardPage({
 
   let data: Awaited<ReturnType<typeof getKpis>> | null = null;
   let sync: Awaited<ReturnType<typeof getSyncStatus>> | null = null;
+  let dissatisfied: Awaited<ReturnType<typeof getDissatisfiedBoard>> = [];
   let error: string | null = null;
 
   try {
-    data = await getKpis(filters);
-    sync = await getSyncStatus();
+    [data, sync, dissatisfied] = await Promise.all([
+      getKpis(filters),
+      getSyncStatus(),
+      getDissatisfiedBoard(filters),
+    ]);
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
@@ -76,6 +61,10 @@ export default async function DashboardPage({
           <p className="text-sm text-[var(--muted)]">
             {filters.from} → {filters.to} ({timezoneLabel(filters.timeZone)}) ·{" "}
             {cfg.APP_BRAND_NAME}
+            {" · "}
+            <Link href="/data-flow" className="text-[var(--brand)] hover:underline">
+              Data flow
+            </Link>
           </p>
         </div>
       </div>
@@ -105,38 +94,38 @@ export default async function DashboardPage({
         Overall KPIs
       </SectionTitle>
       <div className="mb-6 grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        <Kpi
+        <KpiTile
           label="Conversations"
           tip="Count of Freshchat conversations in range (one row per conversation_id). Click to open the table."
           value={fmtInt(k?.total)}
           href={raw()}
         />
-        <Kpi
+        <KpiTile
           label="Open chats"
           tip="Conversations not marked resolved."
           value={fmtInt(k?.openCount)}
           footnote={k ? `${fmtPct(k.openRate)} of total` : undefined}
           href={raw({ resolved: "false" })}
         />
-        <Kpi
+        <KpiTile
           label="Unique users"
           tip="Distinct primary_user_id values (customers)."
           value={fmtInt(k?.uniqueUsers)}
           href={`/users?${baseQuery}`}
         />
-        <Kpi
+        <KpiTile
           label="Resolution rate"
           tip="resolved=true ÷ total conversations."
           value={fmtPct(k?.resolutionRate)}
           href={raw({ resolved: "true" })}
         />
-        <Kpi
+        <KpiTile
           label="Reopen rate"
           tip="reopened=true ÷ total (Freshchat reopen flag when present)."
           value={fmtPct(k?.reopenRate)}
           href={raw({ reopened: "true" })}
         />
-        <Kpi
+        <KpiTile
           label="Avg CSAT"
           tip="Average of csat.rating where rated. Footnote shows rated n of total."
           value={fmtNum(k?.averageCsat)}
@@ -145,87 +134,131 @@ export default async function DashboardPage({
           }
           href={raw({ csat: "rated" })}
         />
-        <Kpi
+        <KpiTile
           label="% Satisfied (≥4)"
           tip="Ratings ≥4 ÷ rated count."
           value={fmtPct(k?.satisfiedRate)}
           href={raw({ csat: "satisfied" })}
         />
-        <Kpi
+        <KpiTile
           label="% Dissatisfied (≤2)"
           tip="Ratings ≤2 ÷ rated count."
           value={fmtPct(k?.dissatisfiedRate)}
           href={raw({ csat: "dissatisfied" })}
         />
-        <Kpi
+        <KpiTile
           label="CSAT response rate"
-          tip="Rated chats ÷ total conversations."
+          tip="Rated chats ÷ total conversations. Industry 20–30% is usually rated ÷ surveys offered — this includes chats that never got a survey."
           value={fmtPct(k?.csatResponseRate)}
-          href={raw({ csat: "rated" })}
+          footnote={
+            k
+              ? `${k.ratedCount.toLocaleString()} of ${k.total.toLocaleString()} chats`
+              : undefined
+          }
+          href={raw({ csat: "unrated" })}
         />
-        <Kpi
+        <KpiTile
+          label="CSAT on resolved"
+          tip="Rated resolved chats ÷ resolved chats. Closer to a survey-completion rate when Freshchat sends CSAT on resolve."
+          value={fmtPct(k?.csatResponseRateResolved)}
+          footnote={
+            k
+              ? `${k.ratedResolvedCount.toLocaleString()} of resolved`
+              : undefined
+          }
+          href={raw({ csat: "unrated", resolved: "true" })}
+        />
+        <KpiTile
           label="Label coverage"
-          tip="Chats with a non-empty Freshchat resolution label ÷ total."
+          tip="Chats with a non-empty Freshchat resolution label ÷ total. Keyword inference never counts here."
           value={fmtPct(k?.labelCoverage)}
-          href={raw()}
+          href={raw({ subject: "unlabeled" })}
         />
-        <Kpi
+        <KpiTile
+          label="Derived coverage"
+          tip="Chats with a derived subject (Freshchat label, or keyword if CLASSIFY_ENABLED). Label coverage stays agent tags only."
+          value={fmtPct(k?.derivedCoverage)}
+          footnote={
+            k
+              ? `${k.derivedCount.toLocaleString()} with a subject`
+              : undefined
+          }
+          href={raw({ subjectSource: "none" })}
+        />
+        <KpiTile
           label="Avg messages / chat"
           tip="Sum of message_count ÷ conversations."
           value={fmtNum(k?.avgMessages)}
           href={raw()}
         />
-        <Kpi
+        <KpiTile
           label="With attachments"
           tip="Chats that include at least one attachment in the transcript."
           value={fmtInt(k?.chatsWithAttachments)}
           footnote={k ? `${fmtPct(k.attachmentRate)} of total` : undefined}
           href={raw()}
         />
-        <Kpi
+        <KpiTile
           label="Avg first response"
           tip="Average first-response-time seconds from Freshchat Extract (chats with FRT only)."
           value={fmtDuration(k?.avgFirstResponseSeconds)}
           href={raw()}
         />
-        <Kpi
+        <KpiTile
           label="Median FRT"
           tip="Median first-response time — less skewed by outliers than the average."
           value={fmtDuration(k?.medianFirstResponseSeconds)}
-          href={raw()}
+          href={raw({ sort: "frt", order: "asc" })}
         />
-        <Kpi
+        <KpiTile
+          label="p90 FRT"
+          tip="90th percentile first-response time among chats with FRT."
+          value={fmtDuration(k?.p90FirstResponseSeconds)}
+          href={raw({ sort: "frt", order: "desc" })}
+        />
+        <KpiTile
+          label="% FRT > 2 min"
+          tip="Share of chats with first-response ≥ 120s (industry SLA). Click to open those chats."
+          value={fmtPct(k?.frtOverSlaRate)}
+          footnote={
+            k
+              ? `${k.frtOverSlaCount.toLocaleString()} of ${k.frtWithMetricCount.toLocaleString()} with FRT`
+              : undefined
+          }
+          href={raw({ frt: "over120", sort: "frt", order: "desc" })}
+        />
+        <KpiTile
           label="Avg resolution time"
           tip="Average resolution-time seconds from Extract."
           value={fmtDuration(k?.avgResolutionSeconds)}
           href={raw({ resolved: "true" })}
         />
-        <Kpi
+        <KpiTile
           label="Median resolution"
           tip="Median time to resolve among chats with resolution-time data."
           value={fmtDuration(k?.medianResolutionSeconds)}
           href={raw({ resolved: "true" })}
         />
-        <Kpi
+        <KpiTile
           label="Unassigned chats"
           tip="No assigned_agent_id on the conversation."
           value={fmtInt(k?.unassignedCount)}
           footnote={k ? `${fmtPct(k.unassignedRate)} of total` : undefined}
           href={raw({ agent: "unassigned" })}
         />
-        <Kpi
+        <KpiTile
           label="Responders"
           tip="Distinct assigned agents appearing in this filter range."
           value={fmtInt(k?.agentCount)}
           href={raw()}
         />
-        <Kpi
+        <KpiTile
           label="Channels"
           tip="Distinct channel_name values in range."
           value={fmtInt(k?.channelCount)}
           href={raw()}
         />
-        <Kpi
+        <KpiTile
           label="Groups"
           tip="Distinct Freshchat groups in range."
           value={fmtInt(k?.groupCount)}
@@ -236,71 +269,14 @@ export default async function DashboardPage({
       <SectionTitle tip="Click a bar/slice/point to open matching conversations with the same date range and filters.">
         Trends & distribution
       </SectionTitle>
-      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <DailyVolumeChart
-          data={data?.charts.dailyVolume || []}
-          baseQuery={baseQuery}
-        />
-        <DailyCsatChart
-          data={data?.charts.dailyCsat || []}
-          baseQuery={baseQuery}
-        />
-        <CsatDistributionChart
-          data={data?.charts.csatDistribution || []}
-          baseQuery={baseQuery}
-        />
-        <ResolvedMixChart
-          data={data?.charts.resolvedMix || []}
-          baseQuery={baseQuery}
-        />
-        <ActorShareChart data={data?.charts.actorShare || []} />
-        <ChannelBarChart
-          data={data?.charts.byChannel || []}
-          baseQuery={baseQuery}
-        />
-        <SubjectBarChart
-          data={data?.charts.bySubject || []}
-          baseQuery={baseQuery}
-        />
-        <AgentVolumeChart
-          data={data?.charts.agentVolume || []}
-          baseQuery={baseQuery}
-        />
-        <AgentCsatChart
-          data={data?.charts.averageCsatByAgent || []}
-          baseQuery={baseQuery}
-        />
-        <CsatByChannelChart
-          data={data?.charts.csatByChannel || []}
-          baseQuery={baseQuery}
-        />
-        <FrtDistributionChart
-          data={data?.charts.frtDistribution || []}
-          baseQuery={baseQuery}
-        />
-        <ResolutionDistributionChart
-          data={data?.charts.resolutionDistribution || []}
-          baseQuery={baseQuery}
-        />
-      </div>
+      <DashboardCharts charts={data?.charts} baseQuery={baseQuery} />
 
-      <SectionTitle tip="Deeper patterns from the same filtered conversation set.">
-        Patterns
+      <SectionTitle tip="1–2★ chats in this filter: comment, opener, keyword themes, label, channel, agent, FRT.">
+        Why 1–2 star ratings
       </SectionTitle>
-      <div className="mb-6 grid gap-3 lg:grid-cols-2">
-        <VolumeHeatmapChart
-          data={data?.charts.volumeHeatmap || []}
-          baseQuery={baseQuery}
-        />
-        <LabelTrendChart
-          data={
-            data?.charts.labelTrend || { days: [], series: [] }
-          }
-          baseQuery={baseQuery}
-        />
-      </div>
+      <DissatisfiedBoard rows={dissatisfied} baseQuery={baseQuery} />
 
-      <SectionTitle tip="Deep breakdown: click a row name to open matching conversations.">
+      <SectionTitle tip="Deep breakdown: click a row name to open matching conversations. Sort Unrated % or Dissat. % for CSAT loops.">
         By channel (in depth)
       </SectionTitle>
       <div className="mb-6">
@@ -343,79 +319,4 @@ export default async function DashboardPage({
       </div>
     </div>
   );
-}
-
-function SectionTitle({
-  children,
-  tip,
-}: {
-  children: React.ReactNode;
-  tip?: string;
-}) {
-  return (
-    <h2 className="mb-3 flex items-center text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-      {children}
-      {tip && <InfoTip text={tip} />}
-    </h2>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  footnote,
-  tip,
-  href,
-}: {
-  label: string;
-  value: string;
-  footnote?: string;
-  tip?: string;
-  href?: string;
-}) {
-  const inner = (
-    <>
-      <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
-        {label}
-        {tip && <InfoTip text={tip} />}
-      </div>
-      <div className="mt-0.5 text-lg font-semibold text-[var(--brand-ink)]">
-        {value}
-      </div>
-      {footnote && (
-        <div className="mt-0.5 text-[10px] text-[var(--muted)]">{footnote}</div>
-      )}
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="block rounded-lg border border-[var(--border)] bg-white p-2.5 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
-        title="Open matching conversations"
-      >
-        {inner}
-      </Link>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-white p-2.5">
-      {inner}
-    </div>
-  );
-}
-
-function fmtInt(n?: number | null) {
-  if (n == null) return "—";
-  return n.toLocaleString();
-}
-function fmtNum(n?: number | null) {
-  if (n == null) return "—";
-  return n.toFixed(2);
-}
-function fmtPct(n?: number | null) {
-  if (n == null) return "—";
-  return `${(n * 100).toFixed(1)}%`;
 }

@@ -32,7 +32,7 @@ export default function AnalyticsLayout({
           />
         </div>
 
-        <SidebarNav />
+        <SidebarNav sheetConfigured={Boolean(cfg.DATA_SHEET_URL)} />
 
         <div className="border-t border-[var(--border)] px-4 py-3 text-[10px] text-[var(--muted)]">
           © {year}. Delicut All rights reserved.
@@ -51,7 +51,9 @@ export default function AnalyticsLayout({
             <Suspense fallback={null}>
               <TimezoneSwitcher defaultTimeZone={defaultTz} />
             </Suspense>
-            <SyncStatusBadge />
+            <Suspense fallback={<div className="text-xs text-slate-400">Checking sync…</div>}>
+              <SyncStatusBadge defaultTimeZone={defaultTz} />
+            </Suspense>
             {showLogout && <LogoutButton />}
           </div>
         </header>

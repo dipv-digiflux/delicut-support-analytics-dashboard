@@ -23,7 +23,10 @@ export async function getMongoClient(): Promise<MongoClient> {
     if (!global.__freshchatMongoClient) {
       global.__freshchatMongoClient = new MongoClient(cfg.MONGODB_URI, {
         maxPoolSize: cfg.MONGODB_MAX_POOL_SIZE,
+        minPoolSize: 0,
+        maxIdleTimeMS: 30_000,
         serverSelectionTimeoutMS: cfg.MONGODB_TIMEOUT_MS,
+        socketTimeoutMS: 180_000,
       });
     }
     if (!clientPromise) {
@@ -35,7 +38,10 @@ export async function getMongoClient(): Promise<MongoClient> {
   if (!clientPromise) {
     const client = new MongoClient(cfg.MONGODB_URI, {
       maxPoolSize: cfg.MONGODB_MAX_POOL_SIZE,
+      minPoolSize: 0,
+      maxIdleTimeMS: 30_000,
       serverSelectionTimeoutMS: cfg.MONGODB_TIMEOUT_MS,
+      socketTimeoutMS: 180_000,
     });
     clientPromise = client.connect();
   }
@@ -45,7 +51,7 @@ export async function getMongoClient(): Promise<MongoClient> {
 export async function getDb(): Promise<Db> {
   const cfg = getConfig();
   const client = await getMongoClient();
-  return client.db(cfg.MONGODB_DB);
+  return client.db(cfg.MONGODB_DB); // parsed from MONGODB_URI path
 }
 
 export async function collections() {

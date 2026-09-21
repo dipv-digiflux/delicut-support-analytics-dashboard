@@ -1,33 +1,46 @@
 # Environment variables
 
-## What belongs in `.env` / `.env.local`
+## Files (same keys, same order)
 
-**Keep here (secrets + DB):**
+| File | Git | Role |
+|------|-----|------|
+| `.env.example` | committed | Template with placeholders |
+| `.env` | ignored | Shared non-secrets; **empty** `FRESHCHAT_API_TOKEN` |
+| `.env.local` | ignored | Local overrides; **put the API token here** |
+
+Load order: `.env` then `.env.local` (overrides). Never commit tokens.
+
+**Set these:**
 
 | Variable | Purpose |
 |----------|---------|
 | `FRESHCHAT_API_BASE` | Freshchat API root `https://…/v2` |
-| `FRESHCHAT_API_TOKEN` | Bearer token |
-| `MONGODB_URI` | Mongo connection |
-| `MONGODB_DB` | Database name |
+| `FRESHCHAT_API_TOKEN` | Bearer token (`.env.local` only) |
+| `MONGODB_URI` | Full Mongo URL **including the database name** in the path (`mongodb://127.0.0.1:27017/freshchat_analytics`). No separate `MONGODB_DB`. |
+| `REPORTING_TIMEZONE` | Default timezone when URL has no `?tz=` (`Asia/Dubai`) |
+| `DASHBOARD_ADMIN_USER` | Login username |
+| `DASHBOARD_ADMIN_PASSWORD` | Login password (empty disables the gate) |
+| `DATA_SHEET_URL` | `s3://bucket/key.xlsx` for sidebar **Download all data** |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM keys that can `s3:GetObject` on that file (`.env.local`) |
+| `AWS_REGION` | Bucket region (`ap-south-1` default) |
 
-**Optional overrides** (defaults live in `lib/config.ts` — only set when you need to change them):
+**Optional overrides** (defaults live in `lib/config.ts` — uncomment in env only to change):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `REPORTING_TIMEZONE` | `Asia/Dubai` | Default timezone when URL has no `?tz=` |
-| `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Support Analytics | Chrome branding |
+| `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Freshchat Support Analytics | Chrome branding |
 | `DASHBOARD_API_SECRET` | _(empty)_ | Optional Bearer gate for scripts hitting `/api/*` |
-| `DASHBOARD_ADMIN_USER` | `admin` | Login username when password is set |
-| `DASHBOARD_ADMIN_PASSWORD` | `admin` | When set, UI + APIs require admin login (cookie session) |
 | `DASHBOARD_SESSION_SECRET` | _(derived)_ | HMAC secret for session cookies |
-| `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats |
+| `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats (`npm run reclassify -- --force` after turning on). Writes `derived` only — never Freshchat labels. |
+| `CLASSIFIER_VERSION` | `kw-v2-data` | Bump after taxonomy changes so reclassify refreshes `derived` |
+| `PLATFORM_MONGODB_URI` | _(empty)_ | Optional platform `customer` join for chat sidebar orders/AOV. Empty = unmatched. |
+| `PLATFORM_MONGODB_DB` | _(URI path)_ | Platform database name if not in the URI |
+| `ANALYTICS_MYSQL_URI` | _(empty)_ | Optional analytics warehouse for true renewal/AOV. Empty = `/outcomes` is chat-risk talk only. |
+| `ZIWO_INGEST_URI` | _(empty)_ | Optional ZIWO call ingest. Empty = `/sales` is Phone-ZIWO chats, not dialer CRM. |
 | `SYNC_EVENTS` | (all core Extract events) | Which reports to sync |
 | `LOG_LEVEL` / `LOG_TO_FILE` | `info` / `true` | Sync logging |
 
 All other tunables (extract budgets, HTTP retries, page sizes, export caps, etc.) are **documented in `lib/config.ts`** with defaults — not required in env.
-
-Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 
 ---
 
@@ -46,11 +59,14 @@ Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 ```bash
 FRESHCHAT_API_BASE=https://YOUR_DOMAIN.freshchat.com/v2
 FRESHCHAT_API_TOKEN=paste_token_here
-MONGODB_URI=mongodb://127.0.0.1:27017
-MONGODB_DB=freshchat_analytics
+MONGODB_URI=mongodb://127.0.0.1:27017/freshchat_analytics
 REPORTING_TIMEZONE=Asia/Dubai
 DASHBOARD_ADMIN_USER=admin
 DASHBOARD_ADMIN_PASSWORD=admin
+DATA_SHEET_URL=s3://support-analytics-report/freshchat-20260914-1646.xlsx
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=ap-south-1
 ```
 
 When `DASHBOARD_ADMIN_PASSWORD` is set, visiting the app redirects to `/login`. Default local login: **admin / admin**. Sign out from the header.
@@ -59,10 +75,10 @@ When `DASHBOARD_ADMIN_PASSWORD` is set, visiting the app redirects to `/login`. 
 
 This dashboard is internal analytics. Crawlers are blocked via:
 
-- `robots: noindex, nofollow` in page metadata
+- `robots: noindex, nofollow, noarchive` in page metadata
 - `X-Robots-Tag` response header on all routes
-- `/robots.txt` → `Disallow: /`
-- Empty `/sitemap.xml`
+- `/robots.txt` → `Disallow: /` (public on purpose so crawlers can read it)
+- Empty `/sitemap.xml` (also public; not listed in robots.txt)
 - Admin login gate (session cookie)
 
 Do not submit the URL to Google Search Console or public directories.

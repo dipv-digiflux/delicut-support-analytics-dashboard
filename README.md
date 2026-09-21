@@ -1,13 +1,14 @@
 # Freshchat Analytics Dashboard
 
 Pulls **Freshchat Extract reports as-is** into local MongoDB and serves analytics UI.  
-We do **not** invent CSAT, labels, or rewrite transcripts — optional keyword classify is **off** by default.
+We do **not** invent CSAT, labels, or rewrite transcripts. Keyword classify writes `derived` only (never Freshchat tags). `/outcomes` is chat-risk language until analytics MySQL; `/sales` is Phone-ZIWO chats until a ZIWO ingest.
 
 ## Docs
 
 | Doc | Purpose |
 |-----|---------|
-| [docs/DATA_FLOW.md](./docs/DATA_FLOW.md) | **Freshchat → us flow; Extract vs webhooks (live push)** |
+| [docs/HOW_IT_WORKS.md](./docs/HOW_IT_WORKS.md) | **Start here — screens, numbers, classify, what we are not measuring** |
+| [docs/DATA_FLOW.md](./docs/DATA_FLOW.md) | Freshchat → us flow; Extract vs webhooks (live push) |
 | [docs/DATA_ARCHITECTURE.md](./docs/DATA_ARCHITECTURE.md) | **How we get data, what we store, architecture** |
 | [docs/ENV.md](./docs/ENV.md) | **What each `.env` variable means** |
 | [docs/DASHBOARD_KPIS.md](./docs/DASHBOARD_KPIS.md) | **Dashboard data sources & KPI definitions** |
@@ -35,14 +36,18 @@ npm run sync:year
 npm run dev
 ```
 
-- Dashboard: http://localhost:3000/dashboard  
-- Raw table + CSV export: http://localhost:3000/conversations  
+- How it works: http://localhost:3000/how-it-works
+- Dashboard: http://localhost:3000/dashboard
+- Raw table + CSV export: http://localhost:3000/conversations
 - Chat detail (Freshchat-style): http://localhost:3000/conversations/[id]
+- Chat risk (not true churn): http://localhost:3000/outcomes
+- Phone Sales (Phone-ZIWO chats until ZIWO ingest): http://localhost:3000/sales
+- Data flow: http://localhost:3000/data-flow
 
 ## Data policy
 
 - Stored fields come from Freshchat CSV/API (`rating_raw`, resolution labels, message `raw` columns, SLA seconds).
-- `CLASSIFY_ENABLED=false` → subject = Freshchat resolution label only (empty if unlabeled).
+- `CLASSIFY_ENABLED=true` → unlabeled chats get a keyword `derived.subject`; **Label coverage** stays Freshchat tags.
 - Upserts by Freshchat IDs — re-sync updates, never duplicates.
 
 ## Scripts

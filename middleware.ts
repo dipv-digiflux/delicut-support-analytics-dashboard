@@ -9,9 +9,10 @@ import {
 export const config = {
   matcher: [
     /*
-     * Protect everything except static assets and the login endpoints.
+     * Protect everything except static assets, login, and crawler files.
+     * robots.txt / sitemap.xml must stay public so Disallow: / is actually read.
      */
-    "/((?!_next/static|_next/image|favicon.ico|logo.png|login|api/auth).*)",
+    "/((?!_next/static|_next/image|favicon.ico|logo.png|robots.txt|sitemap.xml|login|api/auth).*)",
   ],
 };
 

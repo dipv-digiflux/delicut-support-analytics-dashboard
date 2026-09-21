@@ -2,7 +2,7 @@
 
 **Status:** Ready to implement after you complete the Freshchat Admin checklist and provide API credentials.  
 **Repo:** `/Users/digiflux/Playground/freshchat-dashboard` (empty / greenfield)  
-**DB for now:** local MongoDB (`mongodb://127.0.0.1:27017`, db `freshchat_analytics`)
+**DB for now:** local MongoDB (`mongodb://127.0.0.1:27017/freshchat_analytics`)
 
 ---
 
@@ -251,8 +251,7 @@ Single `buildConversationMatch(filters)` used by dashboard and table so numbers 
 ```bash
 FRESHCHAT_API_BASE=https://<domain>.freshchat.com/v2
 FRESHCHAT_API_TOKEN=
-MONGODB_URI=mongodb://127.0.0.1:27017
-MONGODB_DB=freshchat_analytics
+MONGODB_URI=mongodb://127.0.0.1:27017/freshchat_analytics
 SYNC_LOOKBACK_DAYS=30
 REPORTING_TIMEZONE=Asia/Kolkata
 CLASSIFY_LLM_ENABLED=false

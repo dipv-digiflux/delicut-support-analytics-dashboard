@@ -9,6 +9,13 @@ export interface CollectionCoverage {
   to: Date | null;
 }
 
+export interface MergedEventCoverage {
+  event: ExtractEvent;
+  from: Date | null;
+  to: Date | null;
+  windows: number;
+}
+
 export interface FailedWindowSummary {
   _id: string;
   event: ExtractEvent;
@@ -25,6 +32,7 @@ export interface DbCoverageReport {
   failed: FailedWindowSummary[];
   exhaustedAttempts: FailedWindowSummary[];
   missingTranscriptDays: number;
+  mergedEvents: MergedEventCoverage[];
   campaign?: {
     id: string;
     since: Date;
@@ -54,22 +62,26 @@ export async function getDbCoverage(opts?: {
   const maxFailed = opts?.maxFailedList ?? 8;
   const maxAttempts = opts?.maxAttempts ?? 5;
 
-  const [convCount, userCount, agentCount, convBounds, rangeConvCount] =
+  const [convCount, userCount, agentCount, convMin, convMax, rangeConvCount] =
     await Promise.all([
       conversations.estimatedDocumentCount(),
       users.countDocuments({ role: "user" }),
       users.countDocuments({ role: { $in: ["agent"] } }),
       conversations
-        .aggregate<{ min: Date | null; max: Date | null }>([
-          {
-            $group: {
-              _id: null,
-              min: { $min: "$created_at" },
-              max: { $max: "$created_at" },
-            },
-          },
-          { $project: { _id: 0, min: 1, max: 1 } },
-        ])
+        .find(
+          { created_at: { $type: "date" } },
+          { projection: { created_at: 1 } },
+        )
+        .sort({ created_at: 1 })
+        .limit(1)
+        .next(),
+      conversations
+        .find(
+          { created_at: { $type: "date" } },
+          { projection: { created_at: 1 } },
+        )
+        .sort({ created_at: -1 })
+        .limit(1)
         .next(),
       opts?.since && opts?.until
         ? conversations.countDocuments({
@@ -77,6 +89,11 @@ export async function getDbCoverage(opts?: {
           })
         : Promise.resolve(0),
     ]);
+
+  const convBounds = {
+    min: convMin?.created_at ?? null,
+    max: convMax?.created_at ?? null,
+  };
 
   const collectionsReport: CollectionCoverage[] = [
     {
@@ -113,6 +130,28 @@ export async function getDbCoverage(opts?: {
       { $group: { _id: "$status", n: { $sum: 1 } } },
     ])
     .toArray();
+
+  const mergedEventRows = await syncWindows
+    .aggregate<{ _id: ExtractEvent; from: Date; to: Date; n: number }>([
+      { $match: { status: "merged" } },
+      {
+        $group: {
+          _id: "$event",
+          from: { $min: "$window_start" },
+          to: { $max: "$window_end" },
+          n: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ])
+    .toArray();
+
+  const mergedEvents: MergedEventCoverage[] = mergedEventRows.map((r) => ({
+    event: r._id,
+    from: r.from ?? null,
+    to: r.to ?? null,
+    windows: r.n,
+  }));
 
   const windowsByStatus: Record<string, number> = {};
   for (const r of statusRows) windowsByStatus[r._id] = r.n;
@@ -176,6 +215,7 @@ export async function getDbCoverage(opts?: {
     failed: failed.slice(0, maxFailed),
     exhaustedAttempts: exhaustedAttempts.slice(0, maxFailed),
     missingTranscriptDays,
+    mergedEvents,
     campaign,
   };
 }

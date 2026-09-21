@@ -20,6 +20,10 @@ export interface ConversationFilters {
   resolved?: "true" | "false";
   reopened?: "true" | "false";
   csat?: string;
+  /** First-response bucket: over120 | lt1m | 1to2m | 2to5m | 5to15m | 15to60m | 1to4h | gt4h */
+  frt?: string;
+  /** derived.subject_source: keyword | resolution_label | none */
+  subjectSource?: string;
   q?: string;
   /** When true (default for KPIs), exclude stub orphans with no created_at */
   excludeStubs?: boolean;
@@ -81,6 +85,39 @@ export const CUSTOMER_SORT_KEYS = new Set([
   "customer_messages",
 ]);
 
+/** First-response SLA used by dashboard tiles (seconds). */
+export const FRT_SLA_SECONDS = 120;
+
+const FRT_RANGES: Record<string, { min: number; max: number | null }> = {
+  over120: { min: FRT_SLA_SECONDS, max: null },
+  lt1m: { min: 0, max: 60 },
+  "1to2m": { min: 60, max: FRT_SLA_SECONDS },
+  "2to5m": { min: FRT_SLA_SECONDS, max: 300 },
+  "5to15m": { min: 300, max: 900 },
+  "15to60m": { min: 900, max: 3600 },
+  "1to4h": { min: 3600, max: 14400 },
+  gt4h: { min: 14400, max: null },
+};
+
+const FRT_CHART_BUCKET: Record<string, string> = {
+  "<1m": "lt1m",
+  "1–2m": "1to2m",
+  "1-2m": "1to2m",
+  "2–5m": "2to5m",
+  "2-5m": "2to5m",
+  "5–15m": "5to15m",
+  "5-15m": "5to15m",
+  "15–60m": "15to60m",
+  "15-60m": "15to60m",
+  "1–4h": "1to4h",
+  "1-4h": "1to4h",
+  ">4h": "gt4h",
+};
+
+export function frtFilterFromChartBucket(bucket: string): string | undefined {
+  return FRT_CHART_BUCKET[bucket];
+}
+
 function getAll(
   sp: URLSearchParams | Record<string, string | string[] | undefined>,
   key: string,
@@ -138,6 +175,12 @@ export function parseFilters(
     resolved: get("resolved") as "true" | "false" | undefined,
     reopened: get("reopened") as "true" | "false" | undefined,
     csat: get("csat"),
+    frt: get("frt") && get("frt")! in FRT_RANGES ? get("frt") : undefined,
+    subjectSource: ["keyword", "resolution_label", "none"].includes(
+      get("subjectSource") || "",
+    )
+      ? get("subjectSource")
+      : undefined,
     q: get("q"),
     page,
     limit,
@@ -256,6 +299,30 @@ export function buildConversationMatch(
     and.push({ "csat.rating": Number(filters.csat) });
   }
 
+  const frtRange = filters.frt ? FRT_RANGES[filters.frt] : undefined;
+  if (frtRange) {
+    const field = "metrics.first_response_time_seconds";
+    if (frtRange.max == null) {
+      and.push({ [field]: { $gte: frtRange.min } });
+    } else {
+      and.push({ [field]: { $gte: frtRange.min, $lt: frtRange.max } });
+    }
+  }
+
+  if (filters.subjectSource === "keyword") {
+    and.push({ "derived.subject_source": "keyword" });
+  } else if (filters.subjectSource === "resolution_label") {
+    and.push({ "derived.subject_source": "resolution_label" });
+  } else if (filters.subjectSource === "none") {
+    and.push({
+      $or: [
+        { derived: null },
+        { "derived.subject_source": "none" },
+        { "derived.subject": { $in: ["", "unclassified"] } },
+      ],
+    });
+  }
+
   if (filters.q) {
     const re = {
       $regex: filters.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
@@ -367,6 +434,8 @@ export function filtersToQuery(filters: ConversationFilters): string {
   set("resolved", filters.resolved);
   set("reopened", filters.reopened);
   set("csat", filters.csat);
+  set("frt", filters.frt);
+  set("subjectSource", filters.subjectSource);
   set("q", filters.q);
   set("sort", filters.sort);
   set("order", filters.order);
