@@ -22,6 +22,7 @@ import {
   conversationsHrefFromQuery,
   subjectFilterValue,
 } from "@/lib/dashboard-links";
+import { frtFilterFromChartBucket } from "@/lib/filters";
 
 ChartJS.register(
   CategoryScale,
@@ -617,7 +618,7 @@ export function FrtDistributionChart({
   return (
     <ChartCard
       title="FRT distribution"
-      tip="First-response time buckets. Click a bar to browse chats (same date filters)."
+      tip="First-response time buckets. 2 min is the industry SLA — click a bar to open that slice."
       clickable
     >
       {data.every((d) => d.count === 0) ? (
@@ -636,8 +637,10 @@ export function FrtDistributionChart({
           options={{
             ...compactOpts,
             onClick: (e, els) =>
-              clickIndex(e, els, () => {
-                go({});
+              clickIndex(e, els, (idx) => {
+                const bucket = data[idx]?.bucket;
+                const frt = bucket ? frtFilterFromChartBucket(bucket) : undefined;
+                go(frt ? { frt, sort: "frt", order: "desc" } : {});
               }),
             onHover: (event, elements) => {
               const canvas = event.native?.target as HTMLElement | undefined;

@@ -12,7 +12,7 @@ import {
 import { InfoTip } from "@/components/ui/InfoTip";
 import { SEARCH_COVERS, SEARCH_PLACEHOLDER } from "@/lib/search-labels";
 
-const FILTER_STORAGE = "delicut.filters.visible.v1";
+const FILTER_STORAGE = "delicut.filters.visible.v2";
 
 const FILTER_DEFS = [
   { id: "dates", label: "Date range", defaultOn: true },
@@ -24,6 +24,8 @@ const FILTER_DEFS = [
   { id: "resolved", label: "Resolved", defaultOn: true },
   { id: "reopened", label: "Reopened", defaultOn: false },
   { id: "csat", label: "CSAT", defaultOn: true },
+  { id: "frt", label: "First response", defaultOn: true },
+  { id: "subjectSource", label: "Subject source", defaultOn: true },
   { id: "search", label: "Search", defaultOn: true },
 ] as const satisfies readonly ColumnDef<string>[];
 
@@ -39,6 +41,8 @@ const ACTIVE_PARAM_KEYS = [
   "resolved",
   "reopened",
   "csat",
+  "frt",
+  "subjectSource",
   "q",
 ] as const;
 
@@ -306,6 +310,45 @@ export function FilterBar({
                 <option value="3">3</option>
                 <option value="2">2</option>
                 <option value="1">1</option>
+              </select>
+            </Field>
+          )}
+          {show("frt") && (
+            <Field
+              label="FRT"
+              tip="First-response time from Freshchat Extract. > 2 min is the industry SLA tail."
+            >
+              <select
+                className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+                value={sp.get("frt") || ""}
+                onChange={(e) => update("frt", e.target.value)}
+              >
+                <option value="">Any</option>
+                <option value="over120">&gt; 2 min (SLA)</option>
+                <option value="lt1m">Under 1 min</option>
+                <option value="1to2m">1–2 min</option>
+                <option value="2to5m">2–5 min</option>
+                <option value="5to15m">5–15 min</option>
+                <option value="15to60m">15–60 min</option>
+                <option value="1to4h">1–4 hours</option>
+                <option value="gt4h">Over 4 hours</option>
+              </select>
+            </Field>
+          )}
+          {show("subjectSource") && (
+            <Field
+              label="Subject source"
+              tip="Freshchat agent tag vs keyword inference. Label coverage still counts agent tags only."
+            >
+              <select
+                className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
+                value={sp.get("subjectSource") || ""}
+                onChange={(e) => update("subjectSource", e.target.value)}
+              >
+                <option value="">Any</option>
+                <option value="resolution_label">Freshchat label</option>
+                <option value="keyword">Keyword (inferred)</option>
+                <option value="none">None</option>
               </select>
             </Field>
           )}

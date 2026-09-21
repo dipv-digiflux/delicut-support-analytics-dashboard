@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageBubble, type ChatMsg } from "@/components/chat/MessageBubble";
 import { ChannelIcon } from "@/components/chat/ChannelIcon";
 import { ChannelBadge, ProfileAvatar } from "@/components/ui/Identity";
+import { AccountSnapshot } from "@/components/AccountSnapshot";
 import { RawJsonButton, RawJsonModal } from "@/components/ui/RawJson";
 import { channelTheme, parseChannel } from "@/lib/display/channel";
 import { shortId } from "@/lib/display/mask";
@@ -32,8 +33,10 @@ type ConversationMeta = {
     name: string | null;
     email: string | null;
     phone: string | null;
+    referenceId?: string | null;
     properties?: Record<string, unknown>;
   };
+  platform?: import("@/lib/platform/lookup").PlatformSnapshot | null;
   agent: { id: string | null; name: string };
   raw?: unknown;
 };
@@ -220,6 +223,11 @@ export function ConversationChat({
           <Section title="Customer">
             <Row label="Email" value={conversation.user.email || "—"} />
             <Row label="Phone" value={conversation.user.phone || "—"} />
+            <Row
+              label="Reference"
+              value={conversation.user.referenceId || "—"}
+              mono
+            />
             <Row label="User ID" value={conversation.user.id || "—"} mono />
             {Object.entries(conversation.user.properties || {}).map(
               ([k, v]) => (
@@ -227,6 +235,7 @@ export function ConversationChat({
               ),
             )}
           </Section>
+          <AccountSnapshot snapshot={conversation.platform} />
           <Section title="Conversation">
             <Row
               label="Created"

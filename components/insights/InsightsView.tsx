@@ -146,6 +146,18 @@ export function InsightsView({
               label="Median first reply"
               tip="How long customers wait for a first human/bot reply."
               value={fmtDuration(k?.medianFirstResponseSeconds)}
+              href={raw({ sort: "frt", order: "asc" })}
+            />
+            <KpiTile
+              label="% FRT > 2 min"
+              tip="Share of chats waiting ≥ 120s for a first response."
+              value={fmtPct(k?.frtOverSlaRate)}
+              footnote={
+                k
+                  ? `${k.frtOverSlaCount.toLocaleString()} chats`
+                  : undefined
+              }
+              href={raw({ frt: "over120", sort: "frt", order: "desc" })}
             />
             <KpiTile
               label="Reopen rate"
@@ -193,8 +205,13 @@ export function InsightsView({
             />
             <KpiTile
               label="CSAT response"
-              tip="Rated chats ÷ total. Thin response means a weak brand read."
+              tip="Rated chats ÷ total. Also see CSAT on resolved on the full dashboard — industry 20–30% is usually surveys offered."
               value={fmtPct(k?.csatResponseRate)}
+              footnote={
+                k?.csatResponseRateResolved != null
+                  ? `${fmtPct(k.csatResponseRateResolved)} of resolved`
+                  : undefined
+              }
               href={raw({ csat: "unrated" })}
             />
             <KpiTile

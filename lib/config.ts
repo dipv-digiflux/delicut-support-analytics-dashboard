@@ -179,10 +179,24 @@ const ConfigSchema = z.object({
 
   // --- Classification (off = Freshchat labels only) ---
   CLASSIFY_ENABLED: boolish,
-  CLASSIFIER_VERSION: z.string().default("kw-v1"),
+  CLASSIFIER_VERSION: z.string().default("kw-v2-data"),
   CLASSIFY_MESSAGE_WINDOW: z.coerce.number().int().positive().default(5),
   CLASSIFY_MIN_SCORE: z.coerce.number().int().positive().default(3),
   CLASSIFY_LLM_ENABLED: boolish,
+
+  /** Optional platform Mongo for order/AOV sidebar. Empty = show unmatched. */
+  PLATFORM_MONGODB_URI: z.string().optional().default(""),
+  PLATFORM_MONGODB_DB: z.string().optional().default(""),
+  PLATFORM_CUSTOMER_COLLECTION: z.string().optional().default("customer"),
+  /**
+   * Analytics MySQL (renewal / AOV / non-renewals). Empty = /outcomes stays
+   * chat-risk language only — we do not invent subscription outcomes.
+   */
+  ANALYTICS_MYSQL_URI: z.string().optional().default(""),
+  /**
+   * ZIWO (or equivalent) call ingest. Empty = /sales is Phone-ZIWO chats only.
+   */
+  ZIWO_INGEST_URI: z.string().optional().default(""),
 
   // --- Logging ---
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

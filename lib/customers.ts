@@ -14,6 +14,7 @@ import {
   messageExportRow,
   toCsv,
 } from "@/lib/export-messages";
+import { lookupPlatformCustomer } from "@/lib/platform/lookup";
 
 function displayName(u: {
   first_name?: string | null;
@@ -310,6 +311,11 @@ export async function getCustomer(id: string) {
       status: c.status,
       url: c.conversation_url,
     })),
+    platform: await lookupPlatformCustomer({
+      phone: u.phone,
+      email: u.email,
+      referenceId: u.reference_id,
+    }),
     raw: u,
   };
 }

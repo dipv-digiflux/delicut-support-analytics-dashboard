@@ -2,7 +2,7 @@
 
 This app is a **read-mostly analytics warehouse**: Freshchat is the source of truth, MongoDB is the local store, and the Next.js dashboard only reads Mongo. We do not invent CSAT, labels, or SLA times.
 
-Related: [DATA_FLOW.md](./DATA_FLOW.md) (Freshchat → us + webhooks) · [SYNC.md](./SYNC.md) (ops / resume) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) (KPI formulas) · [ENV.md](./ENV.md) (credentials)
+Related: [HOW_IT_WORKS.md](./HOW_IT_WORKS.md) (product map) · [DATA_FLOW.md](./DATA_FLOW.md) (Freshchat → us + webhooks) · [SYNC.md](./SYNC.md) (ops / resume) · [DASHBOARD_KPIS.md](./DASHBOARD_KPIS.md) (KPI formulas) · [ENV.md](./ENV.md) (credentials)
 
 ---
 
@@ -71,7 +71,7 @@ PLAN → FETCH → MERGE → ENRICH → CLASSIFY → FINALIZE
 | **FETCH** | Submit / poll / download each pending window (`processWindow`). |
 | **MERGE** | Upsert by Freshchat conversation / message / user ids; content hashes skip no-ops. |
 | **ENRICH** | Batch `POST /v2/users/fetch` for discovered customer/agent ids. |
-| **CLASSIFY** | Optional (`CLASSIFY_ENABLED=false` by default). Subject = resolution label when classify is off. |
+| **CLASSIFY** | Optional (`CLASSIFY_ENABLED` in env). Subject = Freshchat resolution label when present; else keyword `derived` if classify is on. Never writes back to Freshchat. |
 | **FINALIZE** | Update cursors, campaign checkpoint, `sync_runs` counters. |
 
 Entry points:

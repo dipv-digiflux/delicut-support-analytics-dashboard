@@ -1,11 +1,12 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { DissatisfiedBoard } from "@/components/DissatisfiedBoard";
 import { FilterBar } from "@/components/FilterBar";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { KpiTile, SectionTitle } from "@/components/KpiTile";
 import { DashboardCharts } from "@/components/charts/DashboardCharts";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { getKpis, getSyncStatus } from "@/lib/aggregations";
+import { getDissatisfiedBoard, getKpis, getSyncStatus } from "@/lib/aggregations";
 import { getConfig } from "@/lib/config";
 import { conversationsHref } from "@/lib/dashboard-links";
 import { filtersFromSearchParams } from "@/lib/filter-defaults";
@@ -25,10 +26,15 @@ export default async function DashboardPage({
 
   let data: Awaited<ReturnType<typeof getKpis>> | null = null;
   let sync: Awaited<ReturnType<typeof getSyncStatus>> | null = null;
+  let dissatisfied: Awaited<ReturnType<typeof getDissatisfiedBoard>> = [];
   let error: string | null = null;
 
   try {
-    [data, sync] = await Promise.all([getKpis(filters), getSyncStatus()]);
+    [data, sync, dissatisfied] = await Promise.all([
+      getKpis(filters),
+      getSyncStatus(),
+      getDissatisfiedBoard(filters),
+    ]);
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
@@ -142,15 +148,42 @@ export default async function DashboardPage({
         />
         <KpiTile
           label="CSAT response rate"
-          tip="Rated chats ÷ total conversations."
+          tip="Rated chats ÷ total conversations. Industry 20–30% is usually rated ÷ surveys offered — this includes chats that never got a survey."
           value={fmtPct(k?.csatResponseRate)}
-          href={raw({ csat: "rated" })}
+          footnote={
+            k
+              ? `${k.ratedCount.toLocaleString()} of ${k.total.toLocaleString()} chats`
+              : undefined
+          }
+          href={raw({ csat: "unrated" })}
+        />
+        <KpiTile
+          label="CSAT on resolved"
+          tip="Rated resolved chats ÷ resolved chats. Closer to a survey-completion rate when Freshchat sends CSAT on resolve."
+          value={fmtPct(k?.csatResponseRateResolved)}
+          footnote={
+            k
+              ? `${k.ratedResolvedCount.toLocaleString()} of resolved`
+              : undefined
+          }
+          href={raw({ csat: "unrated", resolved: "true" })}
         />
         <KpiTile
           label="Label coverage"
-          tip="Chats with a non-empty Freshchat resolution label ÷ total."
+          tip="Chats with a non-empty Freshchat resolution label ÷ total. Keyword inference never counts here."
           value={fmtPct(k?.labelCoverage)}
-          href={raw()}
+          href={raw({ subject: "unlabeled" })}
+        />
+        <KpiTile
+          label="Derived coverage"
+          tip="Chats with a derived subject (Freshchat label, or keyword if CLASSIFY_ENABLED). Label coverage stays agent tags only."
+          value={fmtPct(k?.derivedCoverage)}
+          footnote={
+            k
+              ? `${k.derivedCount.toLocaleString()} with a subject`
+              : undefined
+          }
+          href={raw({ subjectSource: "none" })}
         />
         <KpiTile
           label="Avg messages / chat"
@@ -175,7 +208,24 @@ export default async function DashboardPage({
           label="Median FRT"
           tip="Median first-response time — less skewed by outliers than the average."
           value={fmtDuration(k?.medianFirstResponseSeconds)}
-          href={raw()}
+          href={raw({ sort: "frt", order: "asc" })}
+        />
+        <KpiTile
+          label="p90 FRT"
+          tip="90th percentile first-response time among chats with FRT."
+          value={fmtDuration(k?.p90FirstResponseSeconds)}
+          href={raw({ sort: "frt", order: "desc" })}
+        />
+        <KpiTile
+          label="% FRT > 2 min"
+          tip="Share of chats with first-response ≥ 120s (industry SLA). Click to open those chats."
+          value={fmtPct(k?.frtOverSlaRate)}
+          footnote={
+            k
+              ? `${k.frtOverSlaCount.toLocaleString()} of ${k.frtWithMetricCount.toLocaleString()} with FRT`
+              : undefined
+          }
+          href={raw({ frt: "over120", sort: "frt", order: "desc" })}
         />
         <KpiTile
           label="Avg resolution time"
@@ -221,7 +271,12 @@ export default async function DashboardPage({
       </SectionTitle>
       <DashboardCharts charts={data?.charts} baseQuery={baseQuery} />
 
-      <SectionTitle tip="Deep breakdown: click a row name to open matching conversations.">
+      <SectionTitle tip="1–2★ chats in this filter: comment, opener, keyword themes, label, channel, agent, FRT.">
+        Why 1–2 star ratings
+      </SectionTitle>
+      <DissatisfiedBoard rows={dissatisfied} baseQuery={baseQuery} />
+
+      <SectionTitle tip="Deep breakdown: click a row name to open matching conversations. Sort Unrated % or Dissat. % for CSAT loops.">
         By channel (in depth)
       </SectionTitle>
       <div className="mb-6">

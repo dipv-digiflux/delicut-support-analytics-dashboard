@@ -21,8 +21,9 @@ import {
   toCsv,
 } from "@/lib/export-messages";
 import type { EmbeddedMessage } from "@/lib/db/types";
+import { lookupPlatformCustomer } from "@/lib/platform/lookup";
 
-export { getKpis } from "@/lib/kpis";
+export { getKpis, getDissatisfiedBoard } from "@/lib/kpis";
 
 async function matchFor(filters: ConversationFilters) {
   const searchUserIds = filters.q?.trim()
@@ -140,6 +141,7 @@ export async function getConversation(
             last_name: 1,
             email: 1,
             phone: 1,
+            reference_id: 1,
             properties: 1,
           },
         },
@@ -180,6 +182,7 @@ export async function getConversation(
         : null,
       email: u?.email || null,
       phone: u?.phone || null,
+      referenceId: u?.reference_id || null,
       properties: u?.properties || {},
     },
     agent: {
@@ -203,6 +206,11 @@ export async function getConversation(
     messageCount: c.message_count,
     messagesTruncated: c.messages_truncated,
     messages: [],
+    platform: await lookupPlatformCustomer({
+      phone: u?.phone,
+      email: u?.email,
+      referenceId: u?.reference_id,
+    }),
     raw: c,
   };
 }

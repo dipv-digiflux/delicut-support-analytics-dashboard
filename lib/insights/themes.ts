@@ -7,58 +7,7 @@ import {
 import type { KpiResult } from "@/lib/kpis";
 import { fmtPct } from "@/lib/format-kpi";
 
-/** Extra meal-plan / subscription themes — only used on insights, not sync classify. */
-const INSIGHT_THEMES: TaxonomyEntry[] = [
-  {
-    key: "plan.pause",
-    label: "Pause / skip plan",
-    patterns: [
-      { re: /\bpause\b/i, weight: 3 },
-      { re: /\bskip\b/i, weight: 3 },
-      { re: /\bhold (my )?plan\b/i, weight: 2 },
-    ],
-  },
-  {
-    key: "plan.change",
-    label: "Change plan / meals",
-    patterns: [
-      { re: /\bchange (my )?(plan|subscription|meals?)\b/i, weight: 3 },
-      { re: /\bupgrade\b/i, weight: 2 },
-      { re: /\bdowngrade\b/i, weight: 2 },
-      { re: /\bmonthly\b/i, weight: 1 },
-    ],
-  },
-  {
-    key: "trial",
-    label: "Trial",
-    patterns: [
-      { re: /\btrial\b/i, weight: 3 },
-      { re: /\bfree box\b/i, weight: 2 },
-    ],
-  },
-  {
-    key: "quality",
-    label: "Food quality",
-    patterns: [
-      { re: /\bspoil(ed|ing)?\b/i, weight: 3 },
-      { re: /\btaste\b/i, weight: 2 },
-      { re: /\bsmell\b/i, weight: 2 },
-      { re: /\bquality\b/i, weight: 2 },
-      { re: /\brott?en\b/i, weight: 3 },
-    ],
-  },
-  {
-    key: "missing",
-    label: "Missing / wrong item",
-    patterns: [
-      { re: /\bmissing\b/i, weight: 3 },
-      { re: /\bwrong (item|meal|order|box)\b/i, weight: 3 },
-      { re: /\bincomplete\b/i, weight: 2 },
-    ],
-  },
-];
-
-const THEMES: TaxonomyEntry[] = [...INSIGHT_THEMES, ...TAXONOMY];
+const THEMES: TaxonomyEntry[] = TAXONOMY;
 
 export type VoiceCard = {
   key: string;
@@ -101,6 +50,12 @@ function matchThemes(text: string): TaxonomyEntry[] {
   }
   hits.sort((a, b) => b.score - a.score);
   return hits.slice(0, 2).map((h) => h.entry);
+}
+
+/** Theme labels for a comment or opener — used by the 1–2★ board. */
+export function matchThemeLabels(text: string): string[] {
+  if (!text.trim()) return [];
+  return matchThemes(text).map((e) => e.label);
 }
 
 function themeNeedle(entry: TaxonomyEntry): string {
@@ -182,7 +137,7 @@ export function buildChatInsights(
 
   const quotes = [...(voice?.quotes || [])]
     .sort((a, b) => (a.rating ?? 9) - (b.rating ?? 9))
-    .slice(0, 8)
+    .slice(0, 12)
     .map((q) => ({
       id: q.id,
       comment: clipQuote(q.comment, 220),

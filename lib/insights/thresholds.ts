@@ -3,7 +3,9 @@ export const INSIGHT_THRESHOLDS = {
   REOPEN_HIGH: 0.1,
   DISSATISFIED_HIGH: 0.15,
   CSAT_LOW: 3.5,
-  FRT_MEDIAN_SLOW: 900,
+  /** Industry-style first-response SLA (seconds). Histogram and % FRT tiles use this. */
+  FRT_SLA_SECONDS: 120,
+  FRT_MEDIAN_SLOW: 120,
   RESOLVE_MEDIAN_SLOW: 86400,
   UNASSIGNED_HIGH: 0.15,
   BOT_ONLY_LOW: 0.05,

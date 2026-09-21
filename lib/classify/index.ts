@@ -49,7 +49,8 @@ export function classifyConversation(
     .join(" ")
     .toLowerCase();
 
-  if (!userTexts.trim()) {
+  const trimmed = userTexts.replace(/\s+/g, " ").trim();
+  if (!trimmed) {
     return {
       subject: "unclassified",
       subject_source: "none",
@@ -60,7 +61,22 @@ export function classifyConversation(
     };
   }
 
-  const scores: { key: string; score: number; matched: string[] }[] = [];
+  if (
+    /^(hi|hii+|hello|hey|good (morning|afternoon|evening)|thanks?|thank you|هلا|السلام عليكم)[\s!.?]*$/i.test(
+      trimmed,
+    )
+  ) {
+    return {
+      subject: "unclassified",
+      subject_source: "none",
+      confidence: 0,
+      matched_keywords: [],
+      classifier_version: version,
+      classified_at: now,
+    };
+  }
+
+  const scores: { key: string; label: string; score: number; matched: string[] }[] = [];
 
   for (const entry of TAXONOMY) {
     if (entry.negative?.some((re) => re.test(userTexts))) continue;
@@ -72,7 +88,7 @@ export function classifyConversation(
         matched.push(p.re.source);
       }
     }
-    if (score > 0) scores.push({ key: entry.key, score, matched });
+    if (score > 0) scores.push({ key: entry.key, label: entry.label, score, matched });
   }
 
   scores.sort((a, b) => b.score - a.score);
@@ -85,7 +101,7 @@ export function classifyConversation(
     (!second || top.score >= 1.5 * second.score)
   ) {
     return {
-      subject: top.key,
+      subject: top.label,
       subject_source: "keyword",
       confidence: Math.min(1, top.score / 6),
       matched_keywords: top.matched,

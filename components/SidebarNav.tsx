@@ -7,7 +7,10 @@ const support = [
   { href: "/dashboard", label: "Dashboard", icon: "▣" },
   { href: "/conversations", label: "Conversations", icon: "☰" },
   { href: "/users", label: "Customers", icon: "☺" },
+  { href: "/outcomes", label: "Chat risk", icon: "⚠" },
+  { href: "/sales", label: "Phone Sales", icon: "☎" },
   { href: "/data-flow", label: "Data flow", icon: "⇄" },
+  { href: "/how-it-works", label: "How it works", icon: "?" },
 ];
 
 const leadership = [

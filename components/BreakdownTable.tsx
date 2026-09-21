@@ -35,7 +35,9 @@ export type BreakdownRow = {
   rated: number;
   avgCsat: number | null;
   satisfiedRate: number | null;
+  dissatisfiedRate: number | null;
   csatResponseRate: number | null;
+  unratedRate: number | null;
   avgMessages: number | null;
   avgFirstResponseSeconds: number | null;
   avgResolutionSeconds: number | null;
@@ -48,7 +50,9 @@ type SortKey =
   | "reopenRate"
   | "avgCsat"
   | "satisfiedRate"
+  | "dissatisfiedRate"
   | "csatResponseRate"
+  | "unratedRate"
   | "avgMessages"
   | "avgFirstResponseSeconds"
   | "avgResolutionSeconds";
@@ -60,7 +64,9 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "reopenRate", label: "Reopen %" },
   { key: "avgCsat", label: "Avg CSAT" },
   { key: "satisfiedRate", label: "Satisfied %" },
+  { key: "dissatisfiedRate", label: "Dissat. %" },
   { key: "csatResponseRate", label: "CSAT resp %" },
+  { key: "unratedRate", label: "Unrated %" },
   { key: "avgMessages", label: "Avg msgs" },
   { key: "avgFirstResponseSeconds", label: "Avg FRT" },
   { key: "avgResolutionSeconds", label: "Avg resolve" },
@@ -146,7 +152,7 @@ export function BreakdownTable({
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
               {COLUMNS.map((c) => {
@@ -176,7 +182,7 @@ export function BreakdownTable({
             {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={12}
                   className="px-3 py-8 text-center text-slate-400"
                 >
                   No data for this filter
@@ -224,7 +230,13 @@ export function BreakdownTable({
                   {fmtPct(r.satisfiedRate)}
                 </td>
                 <td className="px-3 py-2 text-slate-600">
+                  {fmtPct(r.dissatisfiedRate)}
+                </td>
+                <td className="px-3 py-2 text-slate-600">
                   {fmtPct(r.csatResponseRate)}
+                </td>
+                <td className="px-3 py-2 text-slate-600">
+                  {fmtPct(r.unratedRate)}
                 </td>
                 <td className="px-3 py-2 text-slate-600">
                   {fmtNum(r.avgMessages, 1)}

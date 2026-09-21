@@ -7,7 +7,10 @@ import {
   buildConversationMatch,
   type ConversationFilters,
 } from "@/lib/filters";
+import { INSIGHT_THRESHOLDS } from "@/lib/insights/thresholds";
 import { resolveSearchUserIds } from "@/lib/search";
+
+const FRT_SLA_SECONDS = INSIGHT_THRESHOLDS.FRT_SLA_SECONDS;
 
 const HAS_CSAT_RATING = {
   $in: [{ $type: "$csat.rating" }, ["double", "int", "long", "decimal"]],
@@ -17,6 +20,14 @@ const HAS_RESOLUTION_LABEL = {
   $and: [
     { $eq: [{ $type: "$resolution.label" }, "string"] },
     { $ne: ["$resolution.label", ""] },
+  ],
+} as const;
+
+const HAS_DERIVED_SUBJECT = {
+  $and: [
+    { $eq: [{ $type: "$derived.subject" }, "string"] },
+    { $ne: ["$derived.subject", ""] },
+    { $ne: ["$derived.subject", "unclassified"] },
   ],
 } as const;
 
@@ -31,6 +42,11 @@ const DIM_METRICS = {
   satisfied: {
     $sum: {
       $cond: [{ $and: [HAS_CSAT_RATING, { $gte: ["$csat.rating", 4] }] }, 1, 0],
+    },
+  },
+  dissatisfied: {
+    $sum: {
+      $cond: [{ $and: [HAS_CSAT_RATING, { $lte: ["$csat.rating", 2] }] }, 1, 0],
     },
   },
   messages: { $sum: { $ifNull: ["$message_count", 0] } },
@@ -65,6 +81,7 @@ function mapDimRows(
     rated?: number;
     csatSum?: number;
     satisfied?: number;
+    dissatisfied?: number;
     messages?: number;
     frtSum?: number;
     frtCount?: number;
@@ -86,7 +103,11 @@ function mapDimRows(
       rated,
       avgCsat: rated ? (r.csatSum || 0) / rated : null,
       satisfiedRate: rated ? (r.satisfied || 0) / rated : null,
+      dissatisfiedRate: rated ? (r.dissatisfied || 0) / rated : null,
       csatResponseRate: conversationsCount ? rated / conversationsCount : null,
+      unratedRate: conversationsCount
+        ? (conversationsCount - rated) / conversationsCount
+        : null,
       avgMessages: conversationsCount
         ? (r.messages || 0) / conversationsCount
         : null,
@@ -165,7 +186,8 @@ function voiceFacetBranches() {
     ],
     csatQuotes: [
       { $match: { "csat.comment": { $type: "string" as const, $ne: "" } } },
-      { $limit: 20 },
+      { $sort: { "csat.rating": 1 as const, created_at: -1 as const } },
+      { $limit: 50 },
       {
         $project: {
           comment: "$csat.comment",
@@ -229,6 +251,20 @@ export async function getKpis(
                     $sum: { $cond: [{ $eq: ["$reopened", true] }, 1, 0] },
                   },
                   ratedCount: { $sum: { $cond: [HAS_CSAT_RATING, 1, 0] } },
+                  ratedResolvedCount: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            HAS_CSAT_RATING,
+                            { $eq: ["$resolved", true] },
+                          ],
+                        },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
                   csatSum: { $sum: { $ifNull: ["$csat.rating", 0] } },
                   satisfiedCount: {
                     $sum: {
@@ -251,6 +287,9 @@ export async function getKpis(
                   labeledCount: {
                     $sum: { $cond: [HAS_RESOLUTION_LABEL, 1, 0] },
                   },
+                  derivedCount: {
+                    $sum: { $cond: [HAS_DERIVED_SUBJECT, 1, 0] },
+                  },
                   messageSum: { $sum: { $ifNull: ["$message_count", 0] } },
                   withAttachments: {
                     $sum: {
@@ -272,11 +311,44 @@ export async function getKpis(
                     },
                   },
                   frtAvg: { $avg: "$metrics.first_response_time_seconds" },
-                  frtMedian: {
+                  frtPercentiles: {
                     $percentile: {
                       input: "$metrics.first_response_time_seconds",
-                      p: [0.5],
+                      p: [0.5, 0.9],
                       method: "approximate",
+                    },
+                  },
+                  frtWithMetric: {
+                    $sum: {
+                      $cond: [
+                        { $ne: ["$metrics.first_response_time_seconds", null] },
+                        1,
+                        0,
+                      ],
+                    },
+                  },
+                  frtOverSla: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            {
+                              $ne: [
+                                "$metrics.first_response_time_seconds",
+                                null,
+                              ],
+                            },
+                            {
+                              $gte: [
+                                "$metrics.first_response_time_seconds",
+                                FRT_SLA_SECONDS,
+                              ],
+                            },
+                          ],
+                        },
+                        1,
+                        0,
+                      ],
                     },
                   },
                   resAvg: { $avg: "$metrics.resolution_time_seconds" },
@@ -333,9 +405,14 @@ export async function getKpis(
                     0,
                     60,
                   ),
-                  frtLt5m: metricBucket(
+                  frtLt2m: metricBucket(
                     "$metrics.first_response_time_seconds",
                     60,
+                    FRT_SLA_SECONDS,
+                  ),
+                  frtLt5m: metricBucket(
+                    "$metrics.first_response_time_seconds",
+                    FRT_SLA_SECONDS,
                     300,
                   ),
                   frtLt15m: metricBucket(
@@ -540,18 +617,24 @@ export async function getKpis(
   const unassignedCount = stats?.unassignedCount || 0;
   const labeledCount = stats?.labeledCount || 0;
   const unlabeledCount = Math.max(0, total - labeledCount);
+  const derivedCount = stats?.derivedCount || 0;
+  const ratedResolvedCount = stats?.ratedResolvedCount || 0;
   const botOnlyCount = stats?.botOnlyCount || 0;
   const botInvolvedCount = stats?.botInvolvedCount || 0;
   const frtAvg =
     typeof stats?.frtAvg === "number" ? (stats.frtAvg as number) : null;
   const resAvg =
     typeof stats?.resAvg === "number" ? (stats.resAvg as number) : null;
-  const frtMedian = Array.isArray(stats?.frtMedian)
-    ? ((stats.frtMedian as number[])[0] ?? null)
-    : null;
+  const frtPercentiles = Array.isArray(stats?.frtPercentiles)
+    ? (stats.frtPercentiles as number[])
+    : [];
+  const frtMedian = frtPercentiles[0] ?? null;
+  const p90FirstResponseSeconds = frtPercentiles[1] ?? null;
   const resMedian = Array.isArray(stats?.resMedian)
     ? ((stats.resMedian as number[])[0] ?? null)
     : null;
+  const frtWithMetric = stats?.frtWithMetric || 0;
+  const frtOverSla = stats?.frtOverSla || 0;
 
   const dailyResolved = facet?.dailyResolved || [];
   const resolvedByDay = new Map<string, number>(
@@ -664,14 +747,25 @@ export async function getKpis(
       reopenRate: total ? (stats?.reopenedCount || 0) / total : null,
       averageCsat: ratedCount ? stats.csatSum / ratedCount : null,
       ratedCount,
+      ratedResolvedCount,
       csatResponseRate: total ? ratedCount / total : null,
+      csatResponseRateResolved: resolvedCount
+        ? ratedResolvedCount / resolvedCount
+        : null,
       satisfiedRate: ratedCount ? stats.satisfiedCount / ratedCount : null,
       dissatisfiedRate: ratedCount ? dissatisfiedCount / ratedCount : null,
+      dissatisfiedCount,
       labelCoverage: total ? labeledCount / total : null,
       unlabeledCount,
+      derivedCoverage: total ? derivedCount / total : null,
+      derivedCount,
       avgMessages: total ? (stats?.messageSum || 0) / total : null,
       avgFirstResponseSeconds: frtAvg,
       medianFirstResponseSeconds: frtMedian,
+      p90FirstResponseSeconds,
+      frtOverSlaCount: frtOverSla,
+      frtOverSlaRate: frtWithMetric ? frtOverSla / frtWithMetric : null,
+      frtWithMetricCount: frtWithMetric,
       avgResolutionSeconds: resAvg,
       medianResolutionSeconds: resMedian,
       chatsWithAttachments: withAttachments,
@@ -717,7 +811,8 @@ export async function getKpis(
       volumeHeatmap: heatmapCells,
       frtDistribution: [
         { bucket: "<1m", count: Number(stats?.frtLt1m || 0) },
-        { bucket: "1–5m", count: Number(stats?.frtLt5m || 0) },
+        { bucket: "1–2m", count: Number(stats?.frtLt2m || 0) },
+        { bucket: "2–5m", count: Number(stats?.frtLt5m || 0) },
         { bucket: "5–15m", count: Number(stats?.frtLt15m || 0) },
         { bucket: "15–60m", count: Number(stats?.frtLt60m || 0) },
         { bucket: "1–4h", count: Number(stats?.frtLt4h || 0) },
@@ -793,6 +888,72 @@ export async function getKpis(
       ),
     },
   };
+}
+
+export type DissatisfiedBoardRow = {
+  id: string;
+  rating: number | null;
+  comment: string | null;
+  preview: string;
+  subject: string;
+  channel: string | null;
+  agent: string | null;
+  frtSeconds: number | null;
+  resolved: boolean;
+};
+
+export async function getDissatisfiedBoard(
+  filters: ConversationFilters,
+  limit = 50,
+): Promise<DissatisfiedBoardRow[]> {
+  const { conversations } = await collections();
+  const match = await matchFor(filters);
+  const clauses = match.$and
+    ? [...(match.$and as object[])]
+    : Object.keys(match).length
+      ? [match]
+      : [];
+  clauses.push({
+    "csat.rating": { $ne: null, $lte: 2 },
+  });
+  const docs = await conversations
+    .find(clauses.length === 1 ? clauses[0] : { $and: clauses }, {
+      projection: {
+        "csat.rating": 1,
+        "csat.comment": 1,
+        preview_text: 1,
+        "derived.subject": 1,
+        "resolution.label": 1,
+        channel_name: 1,
+        assigned_agent_name: 1,
+        "metrics.first_response_time_seconds": 1,
+        resolved: 1,
+      },
+    })
+    .sort({ "csat.rating": 1, created_at: -1 })
+    .limit(limit)
+    .toArray();
+
+  return docs.map((c) => {
+    const subject =
+      (typeof c.derived?.subject === "string" && c.derived.subject) ||
+      (typeof c.resolution?.label === "string" && c.resolution.label) ||
+      "";
+    return {
+      id: String(c._id),
+      rating: typeof c.csat?.rating === "number" ? c.csat.rating : null,
+      comment: c.csat?.comment?.trim() || null,
+      preview: (c.preview_text || "").trim(),
+      subject: subject || "(no Freshchat label)",
+      channel: c.channel_name || null,
+      agent: c.assigned_agent_name || null,
+      frtSeconds:
+        typeof c.metrics?.first_response_time_seconds === "number"
+          ? c.metrics.first_response_time_seconds
+          : null,
+      resolved: c.resolved === true,
+    };
+  });
 }
 
 export type KpiResult = Awaited<ReturnType<typeof getKpis>>;

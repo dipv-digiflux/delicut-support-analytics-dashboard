@@ -31,7 +31,12 @@ Load order: `.env` then `.env.local` (overrides). Never commit tokens.
 | `APP_BRAND_NAME` / `APP_PRODUCT_NAME` | Delicut / Freshchat Support Analytics | Chrome branding |
 | `DASHBOARD_API_SECRET` | _(empty)_ | Optional Bearer gate for scripts hitting `/api/*` |
 | `DASHBOARD_SESSION_SECRET` | _(derived)_ | HMAC secret for session cookies |
-| `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats |
+| `CLASSIFY_ENABLED` | `false` | Keyword classify unlabeled chats (`npm run reclassify -- --force` after turning on). Writes `derived` only — never Freshchat labels. |
+| `CLASSIFIER_VERSION` | `kw-v2-data` | Bump after taxonomy changes so reclassify refreshes `derived` |
+| `PLATFORM_MONGODB_URI` | _(empty)_ | Optional platform `customer` join for chat sidebar orders/AOV. Empty = unmatched. |
+| `PLATFORM_MONGODB_DB` | _(URI path)_ | Platform database name if not in the URI |
+| `ANALYTICS_MYSQL_URI` | _(empty)_ | Optional analytics warehouse for true renewal/AOV. Empty = `/outcomes` is chat-risk talk only. |
+| `ZIWO_INGEST_URI` | _(empty)_ | Optional ZIWO call ingest. Empty = `/sales` is Phone-ZIWO chats, not dialer CRM. |
 | `SYNC_EVENTS` | (all core Extract events) | Which reports to sync |
 | `LOG_LEVEL` / `LOG_TO_FILE` | `info` / `true` | Sync logging |
 

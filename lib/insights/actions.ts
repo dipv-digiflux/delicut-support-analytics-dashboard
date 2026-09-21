@@ -87,9 +87,9 @@ export function buildInsightActions(
       persona: "cx",
       severity: "high",
       title: "First response is slow",
-      why: `Median first response is ${fmtDuration(k.medianFirstResponseSeconds)} (threshold ${fmtDuration(T.FRT_MEDIAN_SLOW)}).`,
+      why: `Median first response is ${fmtDuration(k.medianFirstResponseSeconds)} (threshold ${fmtDuration(T.FRT_MEDIAN_SLOW)}). ${fmtPct(k.frtOverSlaRate)} of chats with FRT wait more than 2 min.`,
       next: "Staff the heatmap peaks and review unassigned / bot-to-agent handoff.",
-      href: raw(),
+      href: raw({ frt: "over120", sort: "frt", order: "desc" }),
     });
   }
 
@@ -268,7 +268,7 @@ export function buildInsightActions(
       persona: "marketing",
       severity: "medium",
       title: "Too few customers rate the chat",
-      why: `CSAT response rate is ${fmtPct(k.csatResponseRate)} (${k.ratedCount.toLocaleString()} of ${k.total.toLocaleString()}). Brand read is thin.`,
+      why: `CSAT response rate is ${fmtPct(k.csatResponseRate)} (${k.ratedCount.toLocaleString()} of ${k.total.toLocaleString()} chats). On resolved chats it is ${fmtPct(k.csatResponseRateResolved)}. Brand read is thin.`,
       next: "Open unrated chats and check survey delivery on the top channels.",
       href: raw({ csat: "unrated" }),
     });

@@ -107,9 +107,9 @@ export const EXTRACT_EVENTS: {
 
 export const UI_SURFACES = [
   {
-    name: "Dashboard",
-    path: "/dashboard",
-    reads: "Aggregations on conversations (slim fields, no messages[])",
+    name: "How it works",
+    path: "/how-it-works",
+    reads: "Static product map — screens, CSAT/FRT/label honesty, what still needs other systems",
   },
   {
     name: "Experience",
@@ -135,6 +135,16 @@ export const UI_SURFACES = [
     name: "Customers",
     path: "/users",
     reads: "users collection + conversation counts",
+  },
+  {
+    name: "Chat risk",
+    path: "/outcomes",
+    reads: "Same getKpis() as Dashboard. Pause/cancel/refund language — not subscription non-renewal until ANALYTICS_MYSQL_URI.",
+  },
+  {
+    name: "Phone Sales",
+    path: "/sales",
+    reads: "Same KPIs filtered to channel containing ZIWO. Call connect/talk-time/revenue wait on ZIWO ingest.",
   },
   {
     name: "Export conversations",

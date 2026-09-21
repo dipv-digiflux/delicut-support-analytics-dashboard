@@ -27,7 +27,7 @@ export type ConversationRow = {
     email: string | null;
     phone: string | null;
   };
-  subject: { label: string; slug: string };
+  subject: { label: string; slug: string; source?: string };
   resolutionSubLabel?: string | null;
   agent: { id: string | null; name: string };
   resolved: boolean;
@@ -243,9 +243,16 @@ function cell(id: ColId, row: ConversationRow, timeZone: string) {
               ? ""
               : "!bg-[var(--brand-soft)] !text-[var(--brand)]"
           }`}
-          title={row.subject.label}
+          title={
+            row.subject.source === "keyword"
+              ? `${row.subject.label} (keyword)`
+              : row.subject.label
+          }
         >
           {row.subject.label}
+          {row.subject.source === "keyword" ? (
+            <span className="ml-1 font-normal opacity-70">kw</span>
+          ) : null}
         </Link>
       );
     case "subLabel":
